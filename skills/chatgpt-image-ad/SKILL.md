@@ -135,7 +135,7 @@ Optionally, write the selected paths to `./generated/run-<ts>.jsonl` (one path p
 - **Nano Banana / Gemini image generation** — use `nano-banana-image-ad`.
 - **Video, carousel, DCO ads** — image only.
 - **Ad copy writing** — different skill.
-- **Editing the shared prompt library** — use `image-ad-clone-chatgpt`.
+- **Editing the shared prompt library** — use `image-ad-clone` (asks which backend at Phase 1).
 
 ## Common errors
 
@@ -155,6 +155,6 @@ Optionally, write the selected paths to `./generated/run-<ts>.jsonl` (one path p
 - **[shared/skills/image-ad-prompting/prompting/prompt-library.md](../../shared/skills/image-ad-prompting/prompting/prompt-library.md)** — shared template library (30+ entries with per-model notes)
 - **[shared/skills/image-ad-prompting/prompting/template-format.md](../../shared/skills/image-ad-prompting/prompting/template-format.md)** — entry skeleton for new templates
 - **[shared/skills/image-ad-prompting/prompting/safety-suffixes.md](../../shared/skills/image-ad-prompting/prompting/safety-suffixes.md)** — the 3 always-on guards
-- **[image-ad-clone-chatgpt skill](../image-ad-clone-chatgpt/SKILL.md)** — reverse-engineer an existing ad into a reusable template, validated via this skill's generator
+- **[image-ad-clone skill](../image-ad-clone/SKILL.md)** — single backend-agnostic skill that reverse-engineers an existing ad into a reusable library entry
 - **[arcads-external-api skill](../arcads-external-api/SKILL.md)** — underlying Arcads conventions (session folder, credit cost, QA loop, logs)
 - **[nano-banana-image-ad skill](../nano-banana-image-ad/SKILL.md)** — sibling skill for photoreal / lifestyle / multi-ref templates

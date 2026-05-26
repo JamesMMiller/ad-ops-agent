@@ -145,7 +145,7 @@ Optionally, write the selected paths to `./generated/run-<ts>.jsonl` for downstr
 - **ChatGPT Image 2 / gpt-image-2 generation** — use `chatgpt-image-ad`.
 - **Video, carousel, DCO ads** — image only.
 - **Ad copy writing** — different skill.
-- **Editing the shared prompt library** — use `image-ad-clone-nano-banana`.
+- **Editing the shared prompt library** — use `image-ad-clone` (asks which backend at Phase 1).
 
 ## Common errors
 
@@ -162,6 +162,6 @@ Optionally, write the selected paths to `./generated/run-<ts>.jsonl` for downstr
 
 - **[shared/skills/nano-banana-image-ad/prompting/guide.md](../../shared/skills/nano-banana-image-ad/prompting/guide.md)** — model-specific prompting
 - **[shared/skills/image-ad-prompting/prompting/prompt-library.md](../../shared/skills/image-ad-prompting/prompting/prompt-library.md)** — shared template library
-- **[image-ad-clone-nano-banana skill](../image-ad-clone-nano-banana/SKILL.md)** — reverse-engineer ads into reusable templates
+- **[image-ad-clone skill](../image-ad-clone/SKILL.md)** — single backend-agnostic skill that reverse-engineers an existing ad into a reusable library entry
 - **[arcads-external-api skill](../arcads-external-api/SKILL.md)** — underlying Arcads conventions
 - **[chatgpt-image-ad skill](../chatgpt-image-ad/SKILL.md)** — sibling skill for typography-heavy / UI-mimicry templates

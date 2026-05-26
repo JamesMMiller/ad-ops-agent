@@ -164,7 +164,7 @@ A four-skill family for static Meta image ads with a shared library of **37 vali
 
 - **`chatgpt-image-ad`** — typography-heavy / UI-mimicry creatives (gpt-image-2)
 - **`nano-banana-image-ad`** — photoreal / lifestyle / multi-reference creatives (Nano Banana 2 / Pro / Edit)
-- **`image-ad-clone-chatgpt`** / **`image-ad-clone-nano-banana`** — reverse-engineer any existing ad image into a new library entry
+- **`image-ad-clone`** — single backend-agnostic skill that reverse-engineers any existing ad image into a new library entry (asks which generator to validate against at Phase 1; optionally cross-validates against the other at Phase 8)
 
 Output is image files. Pair with the `meta-ad-builder` skill to publish as paused Meta ads. **Read `shared/skills/image-ad-prompting/OVERVIEW.md` first** — it has the decision tree (which backend for which template), the aspect-ratio compatibility matrix per backend, and the standard generate / clone workflows. Live-validated end-to-end against the Arcads API.
 
@@ -216,7 +216,7 @@ The `analyze-video` workflow under `skills/arcads-external-api/prompting/analyze
 
 > "Reverse-engineer this image ad as a reusable template"
 
-The `image-ad-clone-chatgpt` and `image-ad-clone-nano-banana` skills produce parameterizable entries for the 37-template library (see above).
+The `image-ad-clone` skill produces parameterizable entries for the 37-template library (see above).
 
 ---
 
@@ -234,8 +234,7 @@ The cross-API `meta-ad-builder` skill (in `shared/skills/`) takes a finished cre
 | `skills/generate-youtube-thumbnail/` | 5 CTR-tested YouTube thumbnail formulas with parallel batch firing against Nano Banana 2. |
 | `skills/chatgpt-image-ad/` | Static Meta image-ad creatives via gpt-image-2 (typography / UI mimicry). Live-validated. |
 | `skills/nano-banana-image-ad/` | Static Meta image-ad creatives via Nano Banana 2 / Pro / Edit (photoreal / lifestyle). Live-validated. |
-| `skills/image-ad-clone-chatgpt/` | Reverse-engineer an existing ad image into a reusable gpt-image-2 template. |
-| `skills/image-ad-clone-nano-banana/` | Reverse-engineer an existing ad image into a reusable Nano Banana template. |
+| `skills/image-ad-clone/` | Reverse-engineer an existing ad image into a reusable library entry. Backend-agnostic — asks at Phase 1 whether to validate via gpt-image-2 or Nano Banana, optionally cross-validates against the other at Phase 8. |
 | `shared/skills/image-ad-prompting/` | Shared brain for the image-ad ecosystem: 37 validated templates, safety suffixes, entry format, `OVERVIEW.md`. |
 | `shared/skills/pixar-style-ad/` | Cross-API recipe: 8-beat anthropomorphized mascot ad via GPT Image 2 storyboard + Seedance 2.0 i2v. |
 | `shared/skills/claymation-ad/` | Cross-API recipe: Aardman-style 8-beat clay narrative ad; same backbone as Pixar with stop-motion judder option. |
