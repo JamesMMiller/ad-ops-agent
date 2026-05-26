@@ -65,12 +65,15 @@ def get_ad_creative(ad_id, token):
     url = f"{meta_api.BASE_URL}/{ad_id}"
     params = {
         "access_token": token,
-        "fields": "creative{title,body,link_description,object_story_spec,"
-                  "asset_feed_spec,call_to_action_type}",
+        # asset_feed_spec holds the rotating copy for multi-variant (TEXT_LIQUIDITY)
+        # ads; body/title cover legacy single-copy ads. Do NOT request
+        # link_description — it is not a valid creative field and errors the call.
+        "fields": "creative{id,name,title,body,object_story_spec,asset_feed_spec}",
     }
     resp = requests.get(url, params=params, timeout=60)
     data = resp.json()
     if "error" in data:
+        print(f"  creative fetch error for {ad_id}: {data['error'].get('message')}")
         return None
     return data.get("creative", {})
 
@@ -87,17 +90,27 @@ def extract_purchases(actions, action_values):
 
 
 def extract_copy(creative):
-    body = creative.get("body", "N/A")
-    title = creative.get("title", "N/A")
-    desc = creative.get("link_description", "N/A")
-    link_data = creative.get("object_story_spec", {}).get("link_data", {})
-    if body == "N/A" and link_data.get("message"):
-        body = link_data["message"]
-    if title == "N/A" and link_data.get("name"):
-        title = link_data["name"]
-    if desc == "N/A" and link_data.get("description"):
-        desc = link_data["description"]
-    return {"title": title, "body": body, "description": desc}
+    """Pull copy from a creative, handling both multi-variant ads
+    (asset_feed_spec / TEXT_LIQUIDITY) and legacy single-copy ads."""
+    afs = creative.get("asset_feed_spec") or {}
+    bodies = [b.get("text", "") for b in afs.get("bodies", []) if b.get("text")]
+    titles = [t.get("text", "") for t in afs.get("titles", []) if t.get("text")]
+    descriptions = [d.get("text", "") for d in afs.get("descriptions", []) if d.get("text")]
+
+    # Legacy single-copy fallback when there is no asset_feed_spec.
+    story = creative.get("object_story_spec", {}) or {}
+    link_data = story.get("link_data", {}) or {}
+    video_data = story.get("video_data", {}) or {}
+    if not bodies:
+        b = creative.get("body") or link_data.get("message") or video_data.get("message")
+        if b:
+            bodies = [b]
+    if not titles:
+        t = creative.get("title") or link_data.get("name")
+        if t:
+            titles = [t]
+
+    return {"bodies": bodies, "titles": titles, "descriptions": descriptions}
 
 
 def main():
