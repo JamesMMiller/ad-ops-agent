@@ -13,7 +13,7 @@
 
 ## Brand (optional)
 
-_Edit or replace with your real brand blocks (see `skills/<api>-external-api/prompting/brand-voice-starter.md` if present)._
+_Edit or replace with your real brand blocks. A starter template lives at `skills/<this-repo's-api>-external-api/prompting/brand-voice-starter.md` (e.g. `skills/arcads-external-api/...` in the Arcads repo, `skills/kie-external-api/...` in the KIE repo)._
 
 - **Tone:**
 - **Audience:**
