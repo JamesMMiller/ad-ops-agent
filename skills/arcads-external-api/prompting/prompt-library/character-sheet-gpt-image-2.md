@@ -15,7 +15,7 @@
 | **Cost** | Typically higher per image than Nano Banana 2 | Cheaper; Pro is ~closer to gpt-image-2 |
 | **Best for** | Brand has a slightly stylized / editorial / poster-art aesthetic; A/B comparison runs; users who hit Nano Banana rate limits | The default for pure photoreal AI-influencer / UGC use |
 
-**Default recommendation:** start with Nano Banana ([character-sheet.md](character-sheet.md)). Use this gpt-image-2 version when (a) the brand aesthetic specifically wants the gpt-image-2 look, (b) you're running a side-by-side test, or (c) the user explicitly asks for ChatGPT Image.
+**Default recommendation:** start with Nano Banana ([character-sheet.md](character-sheet.md)). Use this gpt-image-2 version when (a) the brand aesthetic specifically wants the gpt-image-2 look, (b) you're running a side-by-side test, or (c) the user explicitly asks for ChatGPT Image 2.
 
 ## Required flow (do NOT skip steps)
 
