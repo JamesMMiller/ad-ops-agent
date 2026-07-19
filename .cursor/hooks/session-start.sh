@@ -18,7 +18,7 @@ else
   cat >/dev/null || true
 fi
 
-tmp="$(mktemp -t arcads-cursor-session.XXXXXX)"
+tmp="$(mktemp -t ad-ops-agent-session.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT
 
 {
@@ -39,7 +39,7 @@ except OSError:
     text = ""
 if not text:
     text = (
-        "Arcads skill pack (Cursor): session sync ran. "
+        "ad-ops-agent (Cursor): session sync ran. "
         "Read MASTER_CONTEXT.md and .cursor/skills/*/SKILL.md before generating."
     )
 print(json.dumps({"additional_context": text}))

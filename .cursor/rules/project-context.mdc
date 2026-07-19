@@ -3,12 +3,14 @@ description: Load project memory from MASTER_CONTEXT.md and keep it updated afte
 alwaysApply: true
 ---
 
-# Project context (Cursor)
+# Project context — ad-ops-agent (Cursor)
+
+This repo is **ad-ops-agent**: an IDE-native fork of `krusemediallc/arcads-claude-code`, kept in sync with upstream `main`. Aim: run ad ops fully in the IDE; Arcads is optional/legacy backend until replaced.
 
 - If `.env` or `MASTER_CONTEXT.md` do not exist, tell the user to run `./scripts/setup.sh` (or copy `.env.example` → `.env` and `MASTER_CONTEXT.template.md` → `MASTER_CONTEXT.md`, then `./scripts/sync-skill.sh`).
 - At the **start** of substantive work in this repo, read **MASTER_CONTEXT.md** at the repository root for brand voice, credit costs, default product, and API learnings.
 - If `MASTER_CONTEXT.md` has empty fields (credit costs, default product), offer to populate them — ask the user and write the values back.
-- After **significant** changes (new workflows, verified Arcads behaviors, brand updates), append a short **dated** entry to the Changelog section in **MASTER_CONTEXT.md**.
+- After **significant** changes (new workflows, verified API behaviors, brand updates), append a short **dated** entry to the Changelog section in **MASTER_CONTEXT.md**.
 
 ## Skills — where to read
 

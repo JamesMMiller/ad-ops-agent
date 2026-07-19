@@ -1,17 +1,18 @@
-# Arcads AI Video — IDE-Agnostic Agent Skill Pack
+# Ad Ops Agent
 
-> **Fork notice:** This is **[arcads-ide-agnostic](https://github.com/JamesMMiller/arcads-ide-agnostic)** — an IDE-agnostic fork of [`krusemediallc/arcads-claude-code`](https://github.com/krusemediallc/arcads-claude-code). It keeps the same Arcads creative workflows and is maintained to stay current with upstream `main`, while adding first-class support for multiple AI coding environments (Cursor, Claude Code, Copilot-style agents, and anything that reads `AGENTS.md`). Credit for the original pack goes to [Mr. Paid Social / Caleb Kruse](https://skool.com/mrpaidsocial).
+> **Fork notice:** This is **[ad-ops-agent](https://github.com/JamesMMiller/ad-ops-agent)** — a fork of [`krusemediallc/arcads-claude-code`](https://github.com/krusemediallc/arcads-claude-code). The aim is an **ad-ops agent that runs entirely in your IDE** (Cursor, Claude Code, or any assistant that reads `AGENTS.md`), without Arcads as the required product surface. Upstream remains the source of creative workflows and prompt libraries; this fork stays current with upstream `main` while evolving toward IDE-complete ad ops. Credit for the original pack goes to [Mr. Paid Social / Caleb Kruse](https://skool.com/mrpaidsocial).
 
-Create AI marketing videos and images using your [Arcads](https://arcads.ai/?via=claude-code) account, powered by AI agents in **any compatible IDE**. Supports the full Arcads creative stack — **Seedance 2.0** (flagship video), **Sora 2**, **Veo 3.1**, **Kling 3.0**, **Grok Video**, **Nano Banana 2 / Pro / Edit**, **ChatGPT Image 2**, **OmniHuman**, and **Audio-driven** — plus a 37-template static Meta image-ad library and a pipeline for **Pixar-style** and **claymation** animated ads.
+Brief, generate, organize, and iterate AI marketing creatives from your IDE. The stack inherited from upstream covers **Seedance 2.0** (flagship video), **Sora 2**, **Veo 3.1**, **Kling 3.0**, **Grok Video**, **Nano Banana 2 / Pro / Edit**, **ChatGPT Image 2**, **OmniHuman**, and **Audio-driven** — plus a 37-template static Meta image-ad library and pipelines for **Pixar-style** and **claymation** animated ads.
 
 ## About this fork
 
 | | |
 |---|---|
 | **Upstream** | [`krusemediallc/arcads-claude-code`](https://github.com/krusemediallc/arcads-claude-code) |
-| **This fork** | [`JamesMMiller/arcads-ide-agnostic`](https://github.com/JamesMMiller/arcads-ide-agnostic) |
-| **Goal** | Same skill pack, usable beyond a single IDE — Cursor hooks/rules, Claude Code settings, and `AGENTS.md` for other assistants |
-| **Sync policy** | Kept up to date with upstream `main` (periodic `git fetch upstream` + merge/rebase). Fork-only Cursor/IDE wiring lives in `.cursor/` and small script wrappers so upstream pulls stay clean |
+| **This fork** | [`JamesMMiller/ad-ops-agent`](https://github.com/JamesMMiller/ad-ops-agent) |
+| **Aim** | **Ad ops in the IDE** — brief → creative → iterate without needing Arcads as the runtime. The agent (skills, prompts, local workflows) is the product |
+| **Today** | Still based on the upstream Arcads skill pack (API + auth patterns remain until replaced). Use Arcads as an optional backend while we move toward IDE-complete operation |
+| **Sync policy** | Kept up to date with upstream `main` (`git fetch upstream` + merge/rebase). Fork-only IDE wiring lives in `.cursor/` and thin script wrappers so upstream pulls stay clean |
 
 **Staying current with upstream:**
 
@@ -68,11 +69,11 @@ Linux users: `apt install ffmpeg jq nodejs python3`. Windows users: WSL2 recomme
 
 ### 1. Clone this repo
 
-**This fork (IDE-agnostic):**
+**This fork (`ad-ops-agent`):**
 
 ```bash
-git clone https://github.com/JamesMMiller/arcads-ide-agnostic.git
-cd arcads-ide-agnostic
+git clone https://github.com/JamesMMiller/ad-ops-agent.git
+cd ad-ops-agent
 ```
 
 Upstream original (if you want that tree instead):

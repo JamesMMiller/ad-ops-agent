@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# First-run setup for the Arcads skill pack.
-# Creates .env, MASTER_CONTEXT.md, syncs skills, and verifies API connectivity.
+# First-run setup for ad-ops-agent.
+# Creates .env, MASTER_CONTEXT.md, syncs skills, and verifies API connectivity
+# (upstream Arcads backend remains optional until replaced).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "=== Arcads Skill Pack Setup ==="
+echo "=== ad-ops-agent setup ==="
 echo ""
 
 BASE_URL="${ARCADS_BASE_URL:-https://external-api.arcads.ai}"
@@ -139,4 +140,4 @@ else
 fi
 
 echo ""
-echo "Setup complete. Open this folder in Claude Code or Cursor to start."
+echo "Setup complete. Open this folder in your IDE agent (Cursor, Claude Code, etc.) to start."
