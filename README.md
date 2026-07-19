@@ -47,6 +47,15 @@ Linux users: `apt install ffmpeg jq nodejs python3`. Windows users: WSL2 recomme
 
 ### 1. Clone this repo
 
+**Cursor-oriented fork (this repo):**
+
+```bash
+git clone https://github.com/JamesMMiller/arcads-claude-code.git
+cd arcads-claude-code
+```
+
+Upstream source (Claude Code + Cursor dual pack):
+
 ```bash
 git clone https://github.com/krusemediallc/arcads-claude-code.git
 cd arcads-claude-code
@@ -64,12 +73,13 @@ This will:
 - Save it securely in `.env` (never committed to git)
 - Verify your connection to Arcads
 - Create your personal `MASTER_CONTEXT.md` workspace file
+- Sync skills into `.cursor/skills/` and `.claude/skills/`
 
 ### 3. Open in your AI editor
 
-**Claude Code:** Open the folder. A `SessionStart` hook runs and prints an orientation banner showing which skills are installed, whether your `.env` and `MASTER_CONTEXT.md` are set up, and where the docs live.
+**Cursor (recommended for this fork):** Open the folder. A `sessionStart` hook (`.cursor/hooks.json`) syncs skills into `.cursor/skills/` and injects an orientation banner (setup status + installed skills). Project rules live in `.cursor/rules/`.
 
-**Cursor:** Open the folder. Same skills are exposed at `.cursor/skills/`.
+**Claude Code:** Open the folder. A `SessionStart` hook in `.claude/settings.json` runs the same sync + banner.
 
 ### 4. Start creating
 
@@ -268,7 +278,8 @@ The cross-API `meta-ad-builder` skill (in `shared/skills/`) takes a finished cre
 | `MASTER_CONTEXT.md` | Your personalized copy (created by setup, not committed to git). |
 | `.env` | Your API key (created by setup, never committed). |
 | `scripts/setup.sh` | One-time setup. |
-| `scripts/sync-skill.sh` | Copies skill edits to `.claude/` and `.cursor/` directories. |
+| `scripts/sync-skill.sh` | Copies skill edits to `.claude/` and `.cursor/` directories; rewrites `shared/` relative links for the deeper sync path. |
+| `.cursor/hooks.json` | Cursor `sessionStart` — syncs skills + injects the context banner. |
 | `scripts/check-arcads-env.sh` | Tests API connectivity. |
 | `references/` | Drop reference images here (influencers, products, aesthetics) — gitignored. |
 | `logs/arcads-api.jsonl` | Per-call audit log: model, duration, resolution, reference counts, `creditsCharged`. Powers cost-estimation accuracy across sessions. |

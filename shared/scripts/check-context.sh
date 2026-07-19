@@ -41,13 +41,21 @@ upstream_behind=0
 upstream_ref=""
 upstream_log=""
 upstream_dirty=0
-if [[ -d "$ROOT/.git" ]] && git -C "$ROOT" remote get-url origin >/dev/null 2>&1; then
+if [[ "${ARCADS_SKIP_UPSTREAM_CHECK:-}" != "1" ]] \
+  && [[ -d "$ROOT/.git" ]] \
+  && git -C "$ROOT" remote get-url origin >/dev/null 2>&1; then
   # Quiet fetch with a 10s ceiling so offline sessions don't hang.
   if command -v timeout >/dev/null 2>&1; then
     timeout 10 git -C "$ROOT" fetch origin --quiet 2>/dev/null || true
   else
     # macOS without coreutils — fall back to plain fetch, accept the small risk.
-    git -C "$ROOT" fetch origin --quiet 2>/dev/null || true
+    # Prefer gtimeout if present; otherwise skip fetch to avoid hanging Cursor sessionStart.
+    if command -v gtimeout >/dev/null 2>&1; then
+      gtimeout 10 git -C "$ROOT" fetch origin --quiet 2>/dev/null || true
+    else
+      # No timeout binary — skip network fetch (banner still reports local setup).
+      :
+    fi
   fi
   # Resolve upstream: prefer the user's tracked branch; fall back to origin/main.
   upstream_ref="$(git -C "$ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
@@ -73,12 +81,18 @@ env_status="✓"
 mctx_status="✓"
 [[ -f "$ROOT/MASTER_CONTEXT.md" ]] || mctx_status="✗ MISSING — copy MASTER_CONTEXT.template.md to MASTER_CONTEXT.md"
 
-# Inventory registered skills.
-skills_dir="$ROOT/.claude/skills"
+# Inventory registered skills (prefer .cursor/skills for Cursor; fall back to .claude).
+skills_dir=""
+for candidate in "$ROOT/.cursor/skills" "$ROOT/.claude/skills"; do
+  if [[ -d "$candidate" ]]; then
+    skills_dir="$candidate"
+    break
+  fi
+done
 skills_count=0
 image_ad_skills=()
 other_skills=()
-if [[ -d "$skills_dir" ]]; then
+if [[ -n "$skills_dir" ]]; then
   while IFS= read -r d; do
     [[ -d "$d" ]] || continue
     name="$(basename "$d")"
@@ -93,6 +107,8 @@ if [[ -d "$skills_dir" ]]; then
     esac
   done < <(find "$skills_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
 fi
+skills_label="${skills_dir#$ROOT/}"
+[[ -z "$skills_label" ]] && skills_label="(none)"
 
 # Resolve the OVERVIEW path — prefer the one closest to the user's session.
 overview_path=""
@@ -132,7 +148,7 @@ done
   printf '\nSetup:\n'
   printf '  %s .env\n' "$env_status"
   printf '  %s MASTER_CONTEXT.md\n' "$mctx_status"
-  printf '  ✓ skills synced (%d in .claude/skills/)\n' "$skills_count"
+  printf '  ✓ skills synced (%d in %s)\n' "$skills_count" "$skills_label"
 
   if [[ ${#image_ad_skills[@]} -gt 0 ]]; then
     printf '\nImage-ad ecosystem (live-validated 2026-05-25):\n'

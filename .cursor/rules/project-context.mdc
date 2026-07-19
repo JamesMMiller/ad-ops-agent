@@ -3,10 +3,29 @@ description: Load project memory from MASTER_CONTEXT.md and keep it updated afte
 alwaysApply: true
 ---
 
-# Project context
+# Project context (Cursor)
 
-- If `.env` or `MASTER_CONTEXT.md` do not exist, tell the user to run `./scripts/setup.sh`.
+- If `.env` or `MASTER_CONTEXT.md` do not exist, tell the user to run `./scripts/setup.sh` (or copy `.env.example` → `.env` and `MASTER_CONTEXT.template.md` → `MASTER_CONTEXT.md`, then `./scripts/sync-skill.sh`).
 - At the **start** of substantive work in this repo, read **MASTER_CONTEXT.md** at the repository root for brand voice, credit costs, default product, and API learnings.
 - If `MASTER_CONTEXT.md` has empty fields (credit costs, default product), offer to populate them — ask the user and write the values back.
 - After **significant** changes (new workflows, verified Arcads behaviors, brand updates), append a short **dated** entry to the Changelog section in **MASTER_CONTEXT.md**.
-- For Arcads HTTP usage, prompts, and polling, follow **`.cursor/skills/arcads-external-api/SKILL.md`** and linked **reference.md**.
+
+## Skills — where to read
+
+Cursor discovers project skills under **`.cursor/skills/*/SKILL.md`** (populated by `./scripts/sync-skill.sh` and the `sessionStart` hook).
+
+For Arcads HTTP usage, prompts, and polling:
+
+1. Prefer the synced skill at **`.cursor/skills/arcads-external-api/SKILL.md`** (and its `reference.md` / `prompting/`).
+2. When a skill links into shared prompting guides, resolve against repo-root **`shared/skills/`** (canonical). Synced copies rewrite `../../shared/` → `../../../shared/` so markdown links keep working.
+3. Image-ad ecosystem: read **`shared/skills/image-ad-prompting/OVERVIEW.md`** before `chatgpt-image-ad`, `nano-banana-image-ad`, or `image-ad-clone`.
+
+Canonical sources to edit: `skills/` and `shared/skills/`. After editing, run `./scripts/sync-skill.sh` (or start a new agent session).
+
+## Cost disclosure
+
+Always present credit totals as **estimates** — Arcads has no billing endpoint. Tell the user to confirm exact pricing in the Arcads platform.
+
+## Logging
+
+Log every generation call to `logs/arcads-api.jsonl`.
