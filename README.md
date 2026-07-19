@@ -1,6 +1,27 @@
-# Arcads AI Video — Agent Skill Pack
+# Arcads AI Video — IDE-Agnostic Agent Skill Pack
 
-Create AI marketing videos and images using your [Arcads](https://arcads.ai/?via=claude-code) account, powered by AI agents in **Claude Code** or **Cursor**. Supports the full Arcads creative stack — **Seedance 2.0** (flagship video), **Sora 2**, **Veo 3.1**, **Kling 3.0**, **Grok Video**, **Nano Banana 2 / Pro / Edit**, **ChatGPT Image 2**, **OmniHuman**, and **Audio-driven** — plus a 37-template static Meta image-ad library and a pipeline for **Pixar-style** and **claymation** animated ads.
+> **Fork notice:** This is **[arcads-ide-agnostic](https://github.com/JamesMMiller/arcads-ide-agnostic)** — an IDE-agnostic fork of [`krusemediallc/arcads-claude-code`](https://github.com/krusemediallc/arcads-claude-code). It keeps the same Arcads creative workflows and is maintained to stay current with upstream `main`, while adding first-class support for multiple AI coding environments (Cursor, Claude Code, Copilot-style agents, and anything that reads `AGENTS.md`). Credit for the original pack goes to [Mr. Paid Social / Caleb Kruse](https://skool.com/mrpaidsocial).
+
+Create AI marketing videos and images using your [Arcads](https://arcads.ai/?via=claude-code) account, powered by AI agents in **any compatible IDE**. Supports the full Arcads creative stack — **Seedance 2.0** (flagship video), **Sora 2**, **Veo 3.1**, **Kling 3.0**, **Grok Video**, **Nano Banana 2 / Pro / Edit**, **ChatGPT Image 2**, **OmniHuman**, and **Audio-driven** — plus a 37-template static Meta image-ad library and a pipeline for **Pixar-style** and **claymation** animated ads.
+
+## About this fork
+
+| | |
+|---|---|
+| **Upstream** | [`krusemediallc/arcads-claude-code`](https://github.com/krusemediallc/arcads-claude-code) |
+| **This fork** | [`JamesMMiller/arcads-ide-agnostic`](https://github.com/JamesMMiller/arcads-ide-agnostic) |
+| **Goal** | Same skill pack, usable beyond a single IDE — Cursor hooks/rules, Claude Code settings, and `AGENTS.md` for other assistants |
+| **Sync policy** | Kept up to date with upstream `main` (periodic `git fetch upstream` + merge/rebase). Fork-only Cursor/IDE wiring lives in `.cursor/` and small script wrappers so upstream pulls stay clean |
+
+**Staying current with upstream:**
+
+```bash
+git fetch upstream
+git merge upstream/main   # or: git rebase upstream/main
+./scripts/sync-skill.sh
+```
+
+Your `.env`, `MASTER_CONTEXT.md`, `references/`, and `outputs/` are gitignored and survive syncs.
 
 ## 🎥 Watch the walkthrough
 
@@ -47,14 +68,14 @@ Linux users: `apt install ffmpeg jq nodejs python3`. Windows users: WSL2 recomme
 
 ### 1. Clone this repo
 
-**Cursor-oriented fork (this repo):**
+**This fork (IDE-agnostic):**
 
 ```bash
-git clone https://github.com/JamesMMiller/arcads-claude-code.git
-cd arcads-claude-code
+git clone https://github.com/JamesMMiller/arcads-ide-agnostic.git
+cd arcads-ide-agnostic
 ```
 
-Upstream source (Claude Code + Cursor dual pack):
+Upstream original (if you want that tree instead):
 
 ```bash
 git clone https://github.com/krusemediallc/arcads-claude-code.git
@@ -77,9 +98,13 @@ This will:
 
 ### 3. Open in your AI editor
 
-**Cursor (recommended for this fork):** Open the folder. A `sessionStart` hook (`.cursor/hooks.json`) syncs skills into `.cursor/skills/` and injects an orientation banner (setup status + installed skills). Project rules live in `.cursor/rules/`.
+Pick any of these — the skill pack is the same; only the editor wiring differs:
 
-**Claude Code:** Open the folder. A `SessionStart` hook in `.claude/settings.json` runs the same sync + banner.
+| Editor | What loads automatically |
+|--------|--------------------------|
+| **Cursor** | `.cursor/hooks.json` `sessionStart` syncs skills + injects the orientation banner; rules in `.cursor/rules/` |
+| **Claude Code** | `.claude/settings.json` `SessionStart` runs the same sync + banner |
+| **Other agents** | Point them at [`AGENTS.md`](AGENTS.md) + `MASTER_CONTEXT.md` + `skills/` / `shared/skills/` |
 
 ### 4. Start creating
 
