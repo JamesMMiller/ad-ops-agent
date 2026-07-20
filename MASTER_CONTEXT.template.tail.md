@@ -74,9 +74,9 @@ Record exact KIE `model` strings that you've verified work in your account:
 
 Used by **`shopify-store`** (`shared/skills/shopify-store/`).
 
-- **Shop:** `our-tech-accessories.myshopify.com`
-- **Neck fan handle:** `lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan`
-- **Landing page handle:** `summer-wind-neck-fan`
+- **Shop:** _(fill locally)_
+- **Primary product handle(s):** _(fill locally; mark campaign URL locks)_
+- **Local projects:** `outputs/shopify/projects/<name>/` (gitignored)
 - **Main theme ID:** _(fill after `shopify_cli.py list-themes`)_
 
 Credentials: `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` in `.env` only.

@@ -150,14 +150,18 @@ Read **`shared/skills/image-ad-prompting/OVERVIEW.md`** first. Hand off finished
 
 ### 🛍️ Shopify storefront
 
-> "Update the homepage" / "refresh the neck fan product page" / "publish Summer Wind copy"
+> "Update the homepage" / "refresh a product page" / "draft PDP copy for review"
 
 `shopify-store` skill — Admin GraphQL for products, pages, files, and theme templates. Dev Dashboard **client ID + secret** in `.env` (client credentials grant). Always `--dry-run` before live writes.
 
+**Store-specific copy lives under `outputs/shopify/projects/` (gitignored)** — not in the skill pack.
+
 ```bash
+python3 -m venv .venv-shopify && source .venv-shopify/bin/activate
 pip install -r shared/skills/shopify-store/scripts/requirements.txt
 bash shared/skills/shopify-store/scripts/check-shopify-env.sh
-python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --dry-run
+python shared/skills/shopify-store/scripts/apply_product_project.py \
+  --project outputs/shopify/projects/<name> --dry-run
 ```
 
 ---

@@ -6,7 +6,7 @@ Use this checklist when rewriting **homepage**, **collection**, or **product (PD
 
 **Section order (mobile-first):**
 
-1. **Hero** — one product or category promise; full-bleed image or video; single primary CTA ("Shop Summer Wind").
+1. **Hero** — one product or category promise; full-bleed image or video; single primary CTA (e.g. "Shop now").
 2. **Problem → solution** — 3 bullets max above the fold on mobile.
 3. **Featured product** — hero SKU with price, rating placeholder, secondary CTA.
 4. **Benefits grid** — 3–4 icons + short lines (not paragraphs).
@@ -35,7 +35,7 @@ Use this checklist when rewriting **homepage**, **collection**, or **product (PD
 
 **Below the fold structure:**
 
-1. **Benefits** (not features first) — "Hands-free cooling that earns its keep"
+1. **Benefits** (not features first) — lead with the customer outcome
 2. **Feature/spec table** — turbo fans, battery, noise, USB-C, adjustable angle
 3. **Lifestyle gallery** — 4–6 images; alt text on every image
 4. **Comparison** — vs generic neck fans (quiet, dual-sided airflow)
@@ -64,4 +64,4 @@ When creating a dedicated page (not PDP):
 - [ ] All images have alt text
 - [ ] No lorem ipsum; no placeholder prices
 - [ ] Links tested on mobile viewport
-- [ ] Spelling / brand name consistent ("Summer Wind", "Our Tech Accessories")
+- [ ] Spelling / brand name consistent with `MASTER_CONTEXT.md`

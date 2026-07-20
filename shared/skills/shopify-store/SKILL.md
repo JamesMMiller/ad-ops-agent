@@ -11,13 +11,13 @@ description: >-
 
 # Shopify store
 
-Update **Our Tech Accessories** (or any Shopify store) with high-quality copy, images, and storefront structure via the **Admin GraphQL API**. Theme file writes may fall back to **Shopify CLI + Theme Access password** when Admin `themeFilesUpsert` is blocked.
+Update any Shopify store with high-quality copy, images, and storefront structure via the **Admin GraphQL API**. Theme file writes may fall back to **Shopify CLI + Theme Access password** when Admin `themeFilesUpsert` is blocked.
 
 ## When to use
 
 - "Update the Shopify homepage" / "improve the product page"
-- "Publish neck fan copy to the store" / "landing page for Summer Wind"
-- "Upload these creatives to Shopify" / "refresh PDP description"
+- "Refresh PDP copy" / "create a draft product page for review"
+- "Upload these creatives to Shopify Files"
 
 Do **not** use for Meta ad deployment (`meta-ad-builder`) or generative creative (`kie-external-api`).
 
@@ -25,12 +25,27 @@ Do **not** use for Meta ad deployment (`meta-ad-builder`) or generative creative
 
 1. **This file** — workflow, safety, scopes.
 2. **[prompting/storefront-best-practices.md](prompting/storefront-best-practices.md)** — CRO + UI checklist.
-3. **[prompting/neck-fan-brief.md](prompting/neck-fan-brief.md)** — Summer Wind / Lazy Mute product facts + approved VO lines.
+3. **[prompting/project-local-content.md](prompting/project-local-content.md)** — where store-specific briefs live (gitignored).
+
+## Project-local content (not in git)
+
+**Never commit store-specific product copy, handles, or briefs into `shared/skills/`.**
+
+Put them under the gitignored tree:
+
+```
+outputs/shopify/projects/<project-name>/
+  project.json
+  description.html
+  brief.md            # optional
+```
+
+Record active campaign handles / goals in **local** `MASTER_CONTEXT.md` (also gitignored), not in templates with real product IDs.
 
 ## Prerequisites
 
 - **Env** (`.env` — see `.env.example`):
-  - `SHOPIFY_SHOP` — e.g. `our-tech-accessories.myshopify.com`
+  - `SHOPIFY_SHOP` — e.g. `your-store.myshopify.com`
   - `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` — Dev Dashboard app credentials
   - `SHOPIFY_API_VERSION` — default `2025-10`
   - Optional: `SHOPIFY_THEME_ID`, `SHOPIFY_THEME_ACCESS_PASSWORD` (CLI theme push fallback)
@@ -48,8 +63,9 @@ Run `bash scripts/check-shopify-env.sh` before any write.
 4. **Never delete themes** or unpublish the live theme without user confirmation.
 5. **Secrets stay in `.env`** — never log client secret, client ID, or access tokens (mask in check scripts).
 6. **Campaign URL lock:** If ads point at a PDP, **never change `handle` / product URL**. Update title, body, SEO, media in place only.
-7. **Draft before publish:** Default review path is a **DRAFT duplicate** (`--apply-draft`) or a local draft package under `outputs/shopify/`. **Never** set the live ACTIVE product to `DRAFT` — that breaks paid traffic.
+7. **Draft before publish:** Default review path is a **DRAFT duplicate** (`--apply-draft`) or a local package under `outputs/shopify/projects/`. **Never** set the live ACTIVE product to `DRAFT` — that breaks paid traffic.
 8. **Images:** Prefer existing product gallery. Only generate new images after user approval + credit estimate (KIE Nano Banana / ChatGPT Image).
+9. **No client product data in the skill pack** — briefs and HTML stay under `outputs/` (gitignored).
 
 ## Workflow
 
@@ -61,71 +77,56 @@ python shared/skills/shopify-store/scripts/shopify_cli.py whoami
 python shared/skills/shopify-store/scripts/shopify_cli.py list-themes
 ```
 
-Record `MAIN` theme id in `MASTER_CONTEXT.md` → Shopify section.
+Record `MAIN` theme id in local `MASTER_CONTEXT.md` → Shopify section.
 
 ### Phase 2 — Research (read-only)
 
 ```bash
-python shared/skills/shopify-store/scripts/shopify_cli.py get-product \
-  --handle lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan
-
+python shared/skills/shopify-store/scripts/shopify_cli.py get-product --handle <product-handle>
 python shared/skills/shopify-store/scripts/shopify_cli.py get-theme-file \
   --filename templates/index.json --out outputs/shopify/backup-index.json
 ```
 
-### Phase 3 — Draft copy + structure
+### Phase 3 — Draft copy locally
 
-Follow [storefront-best-practices.md](prompting/storefront-best-practices.md) and product brief. Write:
-
-- PDP `description.html` (benefits, specs, FAQ)
-- Optional dedicated page `body.html` for a campaign landing page
-- Homepage section copy blocks (hero headline, subhead, CTA) aligned to Dawn/OS 2.0 section settings
-
-Show the user a summary; get approval.
+Create or update `outputs/shopify/projects/<name>/` per [project-local-content.md](prompting/project-local-content.md). Follow [storefront-best-practices.md](prompting/storefront-best-practices.md). Show the user a summary; get approval.
 
 ### Phase 4 — Dry-run
 
 ```bash
+python shared/skills/shopify-store/scripts/apply_product_project.py \
+  --project outputs/shopify/projects/<name> \
+  --dry-run
+```
+
+Or low-level:
+
+```bash
 python shared/skills/shopify-store/scripts/shopify_cli.py update-product \
   --dry-run --id gid://shopify/Product/... \
-  --title "Summer Wind Neck Fan — Hands-Free Cooling" \
-  --description-file outputs/shopify/neck-fan/description.html \
-  --seo-title "Summer Wind Neck Fan | Hands-Free USB Cooling" \
-  --seo-description "Four turbo fans, whisper-quiet, Type-C battery. Wear it. Forget it."
+  --title "…" \
+  --description-file outputs/shopify/projects/<name>/description.html
 ```
 
 ### Phase 5 — Apply (draft first)
 
-For neck-fan / campaign PDPs:
-
 ```bash
-# 1) Preview mutations
-python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --dry-run
+# Draft duplicate for Admin review (live URL untouched)
+python shared/skills/shopify-store/scripts/apply_product_project.py \
+  --project outputs/shopify/projects/<name> \
+  --apply-draft
 
-# 2) Create DRAFT duplicate in Admin for visual review (live URL untouched)
-python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --apply-draft
-
-# 3) After approval — update LIVE product in place (handle locked)
-python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --apply-live
+# After approval — update LIVE product in place (handle locked when project.json says so)
+python shared/skills/shopify-store/scripts/apply_product_project.py \
+  --project outputs/shopify/projects/<name> \
+  --apply-live
 ```
 
-For homepage JSON (after approval):
-
-1. Try `upsert-theme-files` with edited `templates/index.json`
-2. If exemption/permission error → use `scripts/theme_push.sh --path outputs/shopify/theme-delta/`
+Homepage JSON (after approval): `upsert-theme-files` or `theme_push.sh` fallback.
 
 ### Phase 6 — Assets
 
-**Default: keep existing gallery images.** If new creatives are needed:
-
-1. Pause and show **estimated KIE credits** for Nano Banana / gpt-image-2
-2. Get explicit yes
-3. Generate → upload via Files API → attach to product (without changing handle)
-
-```bash
-python shared/skills/shopify-store/scripts/shopify_cli.py upload-file \
-  --url "https://…" --alt "Neck fan lifestyle"
-```
+**Default: keep existing gallery images.** If new creatives are needed, pause for a **KIE credit estimate**, get yes, then generate and upload.
 
 ### Auth troubleshooting
 
@@ -137,8 +138,8 @@ python shared/skills/shopify-store/scripts/shopify_cli.py upload-file \
 
 ## CLI reference
 
-| Command | Purpose |
-|---------|---------|
+| Command / script | Purpose |
+|------------------|---------|
 | `whoami` | Shop + scopes |
 | `list-products` / `get-product` | Catalog |
 | `update-product` | PDP title, HTML, SEO |
@@ -146,6 +147,7 @@ python shared/skills/shopify-store/scripts/shopify_cli.py upload-file \
 | `list-themes` / `get-theme-file` | Theme read |
 | `upsert-theme-files` | Theme write (may need exemption) |
 | `upload-file` | Register image URL in Files |
+| `apply_product_project.py` | Project-dir draft/live apply |
 
 All write commands accept `--dry-run`.
 
@@ -158,4 +160,4 @@ If `themeFilesUpsert` returns a permissions/exemption error:
 
 ## Logging
 
-Append significant storefront changes to `MASTER_CONTEXT.md` Changelog (dated). Do not commit `.env` or backup dumps with secrets.
+Append significant storefront changes to local `MASTER_CONTEXT.md` Changelog (dated). Do not commit `.env` or `outputs/`.
