@@ -70,14 +70,19 @@ Quick map:
 
 ## This repo specifically
 
-- **API:** Arcads external API (`https://external-api.arcads.ai`).
-- **Auth:** HTTP Basic via `ARCADS_BASIC_AUTH` (pre-encoded `Basic ...` header) or `ARCADS_API_KEY` as the Basic password. Values in `.env` must be **single-quoted** due to special characters.
-- **Fork:** `ad-ops-agent` — ad ops that run fully in the IDE without requiring Arcads as the product surface; kept in sync with upstream `krusemediallc/arcads-claude-code` `main`. Cursor: `.cursor/hooks.json` `sessionStart` + `.cursor/rules/`. Claude Code: `.claude/settings.json`. Other agents: this file + `skills/` / `shared/skills/`.
+- **API:** KIE.ai (`https://api.kie.ai`) — set `AD_OPS_BACKEND=kie` and `KIE_API_KEY`.
+- **Auth:** Bearer token via `KIE_API_KEY`. Setup check: `./scripts/check-kie-env.sh`.
+- **Product:** `ad-ops-agent` — IDE-native ad ops (Cursor / Claude Code / any agent that reads this file). Started from an open creative skill pack; maintained as a standalone project with KIE as the default backend.
 - **Skills:**
-  - `arcads-external-api` — main API reference (endpoints, auth, polling, asset routing).
-  - `generate-youtube-thumbnail` — YouTube thumbnail batch workflow on top of the Nano Banana 2 image endpoint.
+  - `kie-external-api` — primary API reference (Veo / Sora / Nano Banana / Seedance, auth, polling, jobs).
+  - `generate-youtube-thumbnail` — YouTube thumbnail batch workflow.
   - **Image-ad ecosystem** (3 skills + shared 37-template library) — see [shared/skills/image-ad-prompting/OVERVIEW.md](shared/skills/image-ad-prompting/OVERVIEW.md):
-    - `chatgpt-image-ad` — generate via Arcads `gpt-image-2` (typography / UI-mimicry creatives)
-    - `nano-banana-image-ad` — generate via Arcads `nano-banana-2`/`-pro`/`-edit` (photoreal / lifestyle creatives)
-    - `image-ad-clone` — single backend-agnostic skill that reverse-engineers existing ads into reusable templates (asks which backend to validate against at Phase 1; optionally cross-validates at Phase 8)
-- **Setup check:** `./scripts/check-arcads-env.sh`.
+    - `chatgpt-image-ad` — typography / UI-mimicry creatives
+    - `nano-banana-image-ad` — photoreal / lifestyle creatives
+    - `image-ad-clone` — reverse-engineer existing ads into reusable templates
+  - `edit-video` — local ffmpeg soft-stitch / crossfade (no API).
+- **Reference images:** public URLs only for KIE — see *Image hosting* in `MASTER_CONTEXT.md`.
+- **Meta video default:** `aspect_ratio: "1:1"` for IG + Facebook feed dual-placement.
+- **Logging:** `logs/kie-api.jsonl`.
+- **Dashboards:** [kie.ai/logs](https://kie.ai/logs) · [kie.ai/api-key](https://kie.ai/api-key) · [kie.ai/pricing](https://kie.ai/pricing) · [kie.ai/market](https://kie.ai/market).
+- **IDE wiring:** Cursor — `.cursor/hooks.json` `sessionStart` + `.cursor/rules/`. Claude Code — `.claude/settings.json`. Other agents — this file + `skills/` / `shared/skills/`.

@@ -5,29 +5,30 @@ alwaysApply: true
 
 # Project context — ad-ops-agent (Cursor)
 
-This repo is **ad-ops-agent**: an IDE-native fork of `krusemediallc/arcads-claude-code`, kept in sync with upstream `main`. Aim: run ad ops fully in the IDE; Arcads is optional/legacy backend until replaced.
+This repo is **ad-ops-agent**: an IDE-native ad-ops agent. **Default generative backend is KIE.ai** (`AD_OPS_BACKEND=kie`).
 
-- If `.env` or `MASTER_CONTEXT.md` do not exist, tell the user to run `./scripts/setup.sh` (or copy `.env.example` → `.env` and `MASTER_CONTEXT.template.md` → `MASTER_CONTEXT.md`, then `./scripts/sync-skill.sh`).
-- At the **start** of substantive work in this repo, read **MASTER_CONTEXT.md** at the repository root for brand voice, credit costs, default product, and API learnings.
-- If `MASTER_CONTEXT.md` has empty fields (credit costs, default product), offer to populate them — ask the user and write the values back.
-- After **significant** changes (new workflows, verified API behaviors, brand updates), append a short **dated** entry to the Changelog section in **MASTER_CONTEXT.md**.
+- If `.env` or `MASTER_CONTEXT.md` do not exist, tell the user to run `./scripts/setup.sh --with-kie` (or copy `.env.example` → `.env` and `MASTER_CONTEXT.template.md` → `MASTER_CONTEXT.md`, then `./scripts/sync-skill.sh`).
+- Use **`kie-external-api`** for generation when `AD_OPS_BACKEND=kie` or `KIE_API_KEY` is set.
+- At the **start** of substantive work, read **MASTER_CONTEXT.md** for brand voice, credit costs, image hosting, Meta defaults, and API learnings.
+- If `MASTER_CONTEXT.md` has empty fields (credit costs, image hosting, default product), offer to populate them — ask the user and write the values back.
+- After **significant** changes (new workflows, verified API behaviors, brand updates), append a short **dated** entry to the Changelog in **MASTER_CONTEXT.md**.
+- **Meta video creatives** that must run on Instagram + Facebook feed: default **`aspect_ratio: "1:1"`**.
 
 ## Skills — where to read
 
 Cursor discovers project skills under **`.cursor/skills/*/SKILL.md`** (populated by `./scripts/sync-skill.sh` and the `sessionStart` hook).
 
-For Arcads HTTP usage, prompts, and polling:
-
-1. Prefer the synced skill at **`.cursor/skills/arcads-external-api/SKILL.md`** (and its `reference.md` / `prompting/`).
-2. When a skill links into shared prompting guides, resolve against repo-root **`shared/skills/`** (canonical). Synced copies rewrite `../../shared/` → `../../../shared/` so markdown links keep working.
+1. Prefer **`.cursor/skills/kie-external-api/SKILL.md`** (and its `reference.md` / `prompting/`).
+2. Shared prompting guides resolve against repo-root **`shared/skills/`**. Synced copies rewrite `../../shared/` → `../../../shared/` so markdown links keep working.
 3. Image-ad ecosystem: read **`shared/skills/image-ad-prompting/OVERVIEW.md`** before `chatgpt-image-ad`, `nano-banana-image-ad`, or `image-ad-clone`.
+4. Local multi-clip edits: **`.cursor/skills/edit-video/SKILL.md`**.
 
 Canonical sources to edit: `skills/` and `shared/skills/`. After editing, run `./scripts/sync-skill.sh` (or start a new agent session).
 
 ## Cost disclosure
 
-Always present credit totals as **estimates** — Arcads has no billing endpoint. Tell the user to confirm exact pricing in the Arcads platform.
+Always present credit totals as **estimates**. Confirm exact pricing in [kie.ai/pricing](https://kie.ai/pricing) / [kie.ai/logs](https://kie.ai/logs).
 
 ## Logging
 
-Log every generation call to `logs/arcads-api.jsonl`.
+Log every generation call to `logs/kie-api.jsonl`.
