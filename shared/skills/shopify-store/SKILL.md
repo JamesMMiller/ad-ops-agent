@@ -34,7 +34,7 @@ Do **not** use for Meta ad deployment (`meta-ad-builder`) or generative creative
   - `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` — Dev Dashboard app credentials
   - `SHOPIFY_API_VERSION` — default `2025-10`
   - Optional: `SHOPIFY_THEME_ID`, `SHOPIFY_THEME_ACCESS_PASSWORD` (CLI theme push fallback)
-- **Python:** `pip install -r scripts/requirements.txt`
+- **Python:** `python3 -m venv .venv-shopify && source .venv-shopify/bin/activate && pip install -r scripts/requirements.txt`
 - **Dev Dashboard scopes** on the installed app:
   `read_products`, `write_products`, `read_content`, `write_content`, `read_files`, `write_files`, `read_themes`, `write_themes`, `read_online_store_navigation`, `write_online_store_navigation`
 
