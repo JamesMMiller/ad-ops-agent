@@ -191,6 +191,7 @@ flowchart TD
 |--------------|---------|
 | KIE prompting / endpoints | `skills/kie-external-api/` → `./scripts/sync-skill.sh` |
 | Soft-stitch behaviour | `shared/skills/edit-video/` |
+| Shopify products / pages / theme | `shared/skills/shopify-store/` |
 | Cursor session behaviour | `.cursor/hooks/`, `.cursor/rules/` |
 | Agent blurb / identity | `AGENTS.tail.md`, README, this file |
 | First-run UX | `scripts/setup.sh` |
@@ -214,5 +215,6 @@ flowchart TD
 | [README.md](README.md) | Setup, workflows, model overview |
 | [AGENTS.md](AGENTS.md) | Multi-agent operating instructions |
 | `skills/kie-external-api/SKILL.md` + `reference.md` | KIE backend contract |
+| `shared/skills/shopify-store/SKILL.md` | Shopify storefront workflow |
 | [shared/skills/image-ad-prompting/OVERVIEW.md](shared/skills/image-ad-prompting/OVERVIEW.md) | Image-ad decision tree |
 | [MASTER_CONTEXT.template.md](MASTER_CONTEXT.template.md) | Workspace memory shape |

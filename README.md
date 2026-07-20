@@ -24,6 +24,8 @@ Brief, generate, organize, and iterate AI marketing creatives **from your IDE** 
 | **Node.js + `npx hyperframes`** | Caption burn-in | `brew install node` |
 | **`whisper`** | Caption transcription | `pip install openai-whisper` |
 | **`meta-ad-builder` deps** | Publishing to Meta | `pip install -r shared/skills/meta-ad-builder/scripts/requirements.txt` |
+| **`shopify-store` deps** | Shopify Admin API scripts | `pip install -r shared/skills/shopify-store/scripts/requirements.txt` |
+| **Shopify CLI** (optional) | Theme push fallback | `npm install -g @shopify/cli @shopify/theme` |
 
 Linux: `apt install ffmpeg jq nodejs python3`. Windows: WSL2 recommended.
 
@@ -144,6 +146,19 @@ Read **`shared/skills/image-ad-prompting/OVERVIEW.md`** first. Hand off finished
 | Soft-stitch / crossfade clips | `shared/skills/edit-video/` |
 | Burn captions | `shared/skills/caption-video/` |
 | Publish to Meta (PAUSED) | `shared/skills/meta-ad-builder/` |
+| Update Shopify storefront | `shared/skills/shopify-store/` |
+
+### 🛍️ Shopify storefront
+
+> "Update the homepage" / "refresh the neck fan product page" / "publish Summer Wind copy"
+
+`shopify-store` skill — Admin GraphQL for products, pages, files, and theme templates. Dev Dashboard **client ID + secret** in `.env` (client credentials grant). Always `--dry-run` before live writes.
+
+```bash
+pip install -r shared/skills/shopify-store/scripts/requirements.txt
+bash shared/skills/shopify-store/scripts/check-shopify-env.sh
+python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --dry-run
+```
 
 ---
 
@@ -157,6 +172,7 @@ Read **`shared/skills/image-ad-prompting/OVERVIEW.md`** first. Hand off finished
 | `shared/skills/image-ad-prompting/` | 37 templates, safety suffixes, `OVERVIEW.md` |
 | `shared/skills/edit-video/` | Local ffmpeg soft-stitch (no API) |
 | `shared/skills/pixar-style-ad/` · `claymation-ad/` · `caption-video/` | Multi-step creative pipelines |
+| `shared/skills/shopify-store/` | Shopify Admin API — products, pages, theme files |
 | `shared/skills/meta-ad-builder/` | Meta Marketing API publish (PAUSED) |
 | `MASTER_CONTEXT.template.md` | Template for workspace memory |
 | `scripts/setup.sh` · `check-kie-env.sh` · `sync-skill.sh` | Setup, auth check, skill sync |

@@ -67,3 +67,16 @@ Record exact KIE `model` strings that you've verified work in your account:
 ### Logging
 
 - Append every generation to `logs/kie-api.jsonl` (see `logs/README.md`).
+
+---
+
+## Shopify storefront
+
+Used by **`shopify-store`** (`shared/skills/shopify-store/`).
+
+- **Shop:** `our-tech-accessories.myshopify.com`
+- **Neck fan handle:** `lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan`
+- **Landing page handle:** `summer-wind-neck-fan`
+- **Main theme ID:** _(fill after `shopify_cli.py list-themes`)_
+
+Credentials: `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` in `.env` only.
