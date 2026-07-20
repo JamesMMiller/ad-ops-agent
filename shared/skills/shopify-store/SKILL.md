@@ -2,21 +2,22 @@
 name: shopify-store
 description: >-
   Update a Shopify storefront via the Admin GraphQL API — products, pages, files,
-  and theme templates. Uses Dev Dashboard client credentials (client ID + secret).
-  Best-practice copy and UI for homepage and landing pages. Dry-run before every
+  metafields, and theme templates. Uses Dev Dashboard client credentials (client ID + secret).
+  Best-practice CRO copy and UI for homepage, PDP, and landing pages. Dry-run before every
   write. Use when the user asks to update Shopify theme, homepage, product page,
-  store copy, PDP, or publish creatives to their Shopify store. Not for Meta ads
-  (meta-ad-builder) or generating images/video (KIE skills).
+  store copy, PDP, metafields, product templates, or publish creatives to their Shopify store.
+  Not for Meta ads (meta-ad-builder) or generating images/video (KIE skills).
 ---
 
 # Shopify store
 
-Update any Shopify store with high-quality copy, images, and storefront structure via the **Admin GraphQL API**. Theme file writes may fall back to **Shopify CLI + Theme Access password** when Admin `themeFilesUpsert` is blocked.
+Update any Shopify store with high-quality copy, images, metafields, and storefront structure via the **Admin GraphQL API**. Theme file writes may fall back to **Shopify CLI + Theme Access password** when Admin `themeFilesUpsert` is blocked.
 
 ## When to use
 
 - "Update the Shopify homepage" / "improve the product page"
 - "Refresh PDP copy" / "create a draft product page for review"
+- "Add product metafields" / "assign a product template"
 - "Upload these creatives to Shopify Files"
 
 Do **not** use for Meta ad deployment (`meta-ad-builder`) or generative creative (`kie-external-api`).
@@ -24,8 +25,11 @@ Do **not** use for Meta ad deployment (`meta-ad-builder`) or generative creative
 ## Read order
 
 1. **This file** — workflow, safety, scopes.
-2. **[prompting/storefront-best-practices.md](prompting/storefront-best-practices.md)** — CRO + UI checklist.
-3. **[prompting/project-local-content.md](prompting/project-local-content.md)** — where store-specific briefs live (gitignored).
+2. **[prompting/pdp-quality-bar.md](prompting/pdp-quality-bar.md)** — definition of done (hit before apply-live).
+3. **[prompting/storefront-best-practices.md](prompting/storefront-best-practices.md)** — CRO + UI checklist.
+4. **[prompting/metafields.md](prompting/metafields.md)** — standard `custom.*` pack.
+5. **[prompting/product-templates.md](prompting/product-templates.md)** — `tech-accessory` template.
+6. **[prompting/project-local-content.md](prompting/project-local-content.md)** — gitignored project layout.
 
 ## Project-local content (not in git)
 
@@ -38,6 +42,7 @@ outputs/shopify/projects/<project-name>/
   project.json
   description.html
   brief.md            # optional
+  landing-page.html   # optional
 ```
 
 Record active campaign handles / goals in **local** `MASTER_CONTEXT.md` (also gitignored), not in templates with real product IDs.
@@ -57,15 +62,21 @@ Run `bash scripts/check-shopify-env.sh` before any write.
 
 ## Hard rules
 
-1. **`--dry-run` first** on every mutation (product, page, theme files).
+1. **`--dry-run` first** on every mutation (product, page, theme files, metafields).
 2. **Explicit user yes** before live writes.
 3. **Backup before overwrite** — pull current product HTML / `templates/index.json` into `outputs/shopify/<date>-<slug>/` before applying.
 4. **Never delete themes** or unpublish the live theme without user confirmation.
 5. **Secrets stay in `.env`** — never log client secret, client ID, or access tokens (mask in check scripts).
-6. **Campaign URL lock:** If ads point at a PDP, **never change `handle` / product URL**. Update title, body, SEO, media in place only.
-7. **Draft before publish:** Default review path is a **DRAFT duplicate** (`--apply-draft`) or a local package under `outputs/shopify/projects/`. **Never** set the live ACTIVE product to `DRAFT` — that breaks paid traffic.
-8. **Images:** Prefer existing product gallery. Only generate new images after user approval + credit estimate (KIE Nano Banana / ChatGPT Image).
+6. **Campaign URL lock:** If ads point at a PDP, **never change `handle` / product URL**. Update title, body, SEO, media, metafields in place only.
+7. **Draft before publish:** Default review path is a **DRAFT duplicate** (`--apply-draft`). **Never** set the live ACTIVE product to `DRAFT`. Draft enrich must:
+   - Share live media via **`fileUpdate.referencesToAdd`** (images + videos) — never re-upload CDN URLs
+   - Copy options/variants + prices
+   - Link each variant to its featured media (`mediaId`)
+8. **Images:** Prefer existing product gallery. Only generate new images after user approval + credit estimate (KIE Nano Banana / ChatGPT Image). Reject invented branding / failed likeness.
 9. **No client product data in the skill pack** — briefs and HTML stay under `outputs/` (gitignored).
+10. **Quality bar:** Do not request `--apply-live` until [pdp-quality-bar.md](prompting/pdp-quality-bar.md) Required items pass.
+11. **Metafields + template:** On apply-live, set the standard `custom.*` pack and `template_suffix` when present in `project.json`.
+12. **No em dashes (—) in storefront copy** (titles, body HTML, SEO, metafields, homepage/landing). Use colon, period, comma, or rewrite. See [storefront-best-practices.md](prompting/storefront-best-practices.md).
 
 ## Workflow
 
@@ -79,17 +90,27 @@ python shared/skills/shopify-store/scripts/shopify_cli.py list-themes
 
 Record `MAIN` theme id in local `MASTER_CONTEXT.md` → Shopify section.
 
+Ensure metafield definitions once per shop (script does this on apply):
+
+```bash
+python -c "from lib import shopify_api as api; import sys; sys.path.insert(0,'shared/skills/shopify-store/scripts'); ..."
+```
+
+(`apply_product_project.py` calls `ensure_product_metafield_definitions` automatically.)
+
 ### Phase 2 — Research (read-only)
 
 ```bash
 python shared/skills/shopify-store/scripts/shopify_cli.py get-product --handle <product-handle>
 python shared/skills/shopify-store/scripts/shopify_cli.py get-theme-file \
-  --filename templates/index.json --out outputs/shopify/backup-index.json
+  --filename templates/product.json --out outputs/shopify/backup-product.json
 ```
+
+Pull variants + media associations. Note if `templates/product.tech-accessory.json` already exists.
 
 ### Phase 3 — Draft copy locally
 
-Create or update `outputs/shopify/projects/<name>/` per [project-local-content.md](prompting/project-local-content.md). Follow [storefront-best-practices.md](prompting/storefront-best-practices.md). Show the user a summary; get approval.
+Create or update `outputs/shopify/projects/<name>/` per [project-local-content.md](prompting/project-local-content.md). Fill `metafields` + `template_suffix`. Follow [storefront-best-practices.md](prompting/storefront-best-practices.md) and [pdp-quality-bar.md](prompting/pdp-quality-bar.md). Show the user a summary; get approval.
 
 ### Phase 4 — Dry-run
 
@@ -99,34 +120,26 @@ python shared/skills/shopify-store/scripts/apply_product_project.py \
   --dry-run
 ```
 
-Or low-level:
-
-```bash
-python shared/skills/shopify-store/scripts/shopify_cli.py update-product \
-  --dry-run --id gid://shopify/Product/... \
-  --title "…" \
-  --description-file outputs/shopify/projects/<name>/description.html
-```
-
 ### Phase 5 — Apply (draft first)
 
 ```bash
-# Draft duplicate for Admin review (live URL untouched)
 python shared/skills/shopify-store/scripts/apply_product_project.py \
   --project outputs/shopify/projects/<name> \
   --apply-draft
 
-# After approval — update LIVE product in place (handle locked when project.json says so)
+# After approval — live title/body/SEO/metafields/template (handle locked when flagged)
 python shared/skills/shopify-store/scripts/apply_product_project.py \
   --project outputs/shopify/projects/<name> \
   --apply-live
 ```
 
-Homepage JSON (after approval): `upsert-theme-files` or `theme_push.sh` fallback.
+### Phase 6 — Product template (if missing)
 
-### Phase 6 — Assets
+Clone/tune `templates/product.tech-accessory.json` per [product-templates.md](prompting/product-templates.md). Upsert via `upsert-theme-files` or `theme_push.sh`. Assign with `template_suffix` in `project.json` on the next `--apply-live`, or `productUpdate.templateSuffix`.
 
-**Default: keep existing gallery images.** If new creatives are needed, pause for a **KIE credit estimate**, get yes, then generate and upload.
+### Phase 7 — Assets
+
+**Default: keep existing gallery images.** New creatives only after **KIE credit estimate** + yes.
 
 ### Auth troubleshooting
 
@@ -147,7 +160,7 @@ Homepage JSON (after approval): `upsert-theme-files` or `theme_push.sh` fallback
 | `list-themes` / `get-theme-file` | Theme read |
 | `upsert-theme-files` | Theme write (may need exemption) |
 | `upload-file` | Register image URL in Files |
-| `apply_product_project.py` | Project-dir draft/live apply |
+| `apply_product_project.py` | Project-dir draft/live apply (media share, variants, metafields, template) |
 
 All write commands accept `--dry-run`.
 

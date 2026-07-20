@@ -8,7 +8,7 @@
 - **YouTube thumbnails:** `.claude/skills/generate-youtube-thumbnail/SKILL.md`.
 - **Image-ad ecosystem:** read `shared/skills/image-ad-prompting/OVERVIEW.md` FIRST (`chatgpt-image-ad`, `nano-banana-image-ad`, `image-ad-clone`). Meta upload is the separate `meta-ad-builder` skill.
 - **Local video post:** `.claude/skills/edit-video/SKILL.md` (ffmpeg soft-stitch — no API).
-- **Shopify storefront:** `.claude/skills/shopify-store/SKILL.md` — products, pages, theme files via Admin API (`check-shopify-env.sh`).
+- **Shopify storefront:** `.claude/skills/shopify-store/SKILL.md` — products, pages, metafields, theme files via Admin API (`check-shopify-env.sh`). PDP quality bar: `prompting/pdp-quality-bar.md`.
 - **Meta ads:** `.claude/skills/meta-ad-builder/SKILL.md` (optional).
 - **Meta video default:** `1:1` for creatives that must run on Instagram + Facebook feed.
 - **Cost disclosure:** Always present credit totals as **estimates**. Confirm on [kie.ai/pricing](https://kie.ai/pricing) / [kie.ai/logs](https://kie.ai/logs).
