@@ -1,49 +1,45 @@
-# Arcads API logs
+# API generation logs
 
-This directory contains **append-only logs** of every Arcads API generation call made by the agent. The logs power smarter credit-cost estimation over time.
+Append-only logs of every generative API call. They power smarter credit-cost estimation over time.
 
-## Files
+## Primary: KIE.ai
 
-- **`arcads-api.jsonl`** — one JSON object per line. Every `POST` to a generation endpoint (`/v2/videos/generate`, `/v2/images/generate`, `/v1/b-roll`, `/v1/scene`, etc.) appends one line when the request is fired and updates the same line with final status/credits after polling completes.
+- **`kie-api.jsonl`** — one JSON object per line for every KIE generation (`POST /api/v1/veo/generate`, `POST /api/v1/jobs/createTask`).
 
-## Entry schema
+### Entry schema (illustrative)
 
 ```json
 {
-  "timestamp": "2026-04-09T19:18:24.611Z",
-  "endpoint": "POST /v2/videos/generate",
-  "model": "seedance-2.0",
-  "assetId": "290dc89f-d763-4bcf-8da2-290caa00deef",
-  "productId": "10b24deb-2ce7-47f7-8cf3-624b844658b8",
-  "projectId": "0f1e0482-35f8-4ea6-96d9-dbf114f159bf",
+  "timestamp": "2026-07-19T21:54:29.470780Z",
+  "endpoint": "POST /api/v1/jobs/createTask",
+  "model": "bytedance/seedance-2-fast",
+  "taskId": "…",
   "request": {
-    "duration": 15,
+    "duration": 12,
     "resolution": "720p",
-    "aspectRatio": "9:16",
-    "audioEnabled": true,
-    "referenceImagesCount": 1,
-    "referenceVideosCount": 0,
-    "referenceAudiosCount": 0,
-    "promptWordCount": 340
+    "aspect_ratio": "1:1",
+    "promptWordCount": 220
   },
   "response": {
-    "status": "generated",
-    "creditsCharged": 0.9,
-    "generationTimeSec": 90,
-    "videoUrl": "s3://... (presigned, expires)",
-    "thumbnailUrl": "s3://... (presigned, expires)",
-    "error": null
+    "state": "success",
+    "creditsCharged": 396,
+    "resultUrls": ["https://…"]
   },
   "session": {
-    "folderName": "Arcads API - 2026-04-09"
+    "folder": "outputs/2026-07-19-example"
   }
 }
 ```
 
-## How the agent uses this file
+### How the agent uses this file
 
-- **Before any new generation:** grep the log for entries with the same `model` + similar config and use the **actual recorded `creditsCharged`** to compute the estimate — not a hardcoded table.
-- **After each generation:** append the request metadata and the final polled response (including `creditsCharged` and elapsed time).
-- **When pricing rules emerge:** derive per-second or per-unit rates from recorded data and document them in `MASTER_CONTEXT.md`.
+- **Before any new generation:** grep for the same `model` + similar config and use recorded `creditsCharged` for the estimate.
+- **After each generation:** append request metadata and the final polled response.
+- **When pricing rules emerge:** document per-second rates in `MASTER_CONTEXT.md`.
 
-Logs are **not gitignored** — historical cost data across sessions is valuable. Do NOT log API keys, Authorization headers, or full prompt text (prompts can be large; store a word count instead).
+Dashboard: https://kie.ai/logs
+
+## Rules
+
+- Do **not** log API keys, Authorization headers, or full prompt text (store a word count instead).
+- Historical cost data is useful across sessions; keep entries lean.

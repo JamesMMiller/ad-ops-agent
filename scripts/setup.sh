@@ -1,116 +1,153 @@
 #!/usr/bin/env bash
 # First-run setup for ad-ops-agent.
-# Creates .env, MASTER_CONTEXT.md, syncs skills, and verifies API connectivity
-# (upstream Arcads backend remains optional until replaced).
+# Creates workspace files, syncs skills, and (by default) configures KIE.ai.
+#
+# Usage:
+#   ./scripts/setup.sh              # interactive (default: configure KIE)
+#   ./scripts/setup.sh --with-kie
+#   ./scripts/setup.sh --skip-api   # workspace only, no API key
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "=== ad-ops-agent setup ==="
 echo ""
 
-BASE_URL="${ARCADS_BASE_URL:-https://external-api.arcads.ai}"
+WITH_ARCADS=""
+WITH_KIE=""
 
-# Returns 0 if the given Basic auth header works against /v1/products, else non-zero.
-validate_auth() {
-  local header="$1"
-  local code
-  code="$(curl -sS -o /dev/null -w "%{http_code}" \
-    -H "Authorization: $header" "$BASE_URL/v1/products" || echo "000")"
-  [[ "$code" == "200" ]]
+for arg in "$@"; do
+  case "$arg" in
+    --skip-api|--skip-arcads|--no-arcads|--workspace-only)
+      WITH_ARCADS=0
+      WITH_KIE=0
+      ;;
+    --with-arcads|--arcads)
+      echo "Note: --with-arcads is deprecated in this repo; configuring KIE.ai instead."
+      echo "      Use: ./scripts/setup.sh --with-kie"
+      WITH_KIE=1
+      WITH_ARCADS=0
+      ;;
+    --with-kie|--kie)
+      WITH_KIE=1
+      WITH_ARCADS=0
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--with-kie|--skip-api]"
+      echo "  --with-kie    Configure KIE.ai (recommended / default interactive choice)."
+      echo "  --skip-api    Workspace only — no generative API key required."
+      exit 0
+      ;;
+  esac
+done
+
+if [[ -z "$WITH_KIE" && -z "$WITH_ARCADS" ]]; then
+  if [[ "${SKIP_ARCADS:-}" == "1" || "${AD_OPS_SKIP_ARCADS:-}" == "1" ]]; then
+    WITH_ARCADS=0
+    WITH_KIE=0
+  fi
+fi
+
+# Ensure .env exists from .env.example.
+ensure_env_file() {
+  if [[ ! -f "$ROOT/.env" ]]; then
+    cp "$ROOT/.env.example" "$ROOT/.env"
+    echo "Created .env from template."
+  else
+    echo ".env already exists."
+  fi
+  chmod 600 "$ROOT/.env" 2>/dev/null || true
 }
 
-# Mask all but the last 4 chars of a secret for display.
-mask_secret() {
-  local s="$1"
-  local n=${#s}
-  if (( n <= 4 )); then
-    printf '****'
+set_backend() {
+  local backend="$1"
+  if grep -q '^AD_OPS_BACKEND=' "$ROOT/.env" 2>/dev/null; then
+    sed "s|^AD_OPS_BACKEND=.*|AD_OPS_BACKEND=${backend}|" "$ROOT/.env" > "$ROOT/.env.tmp" \
+      && mv "$ROOT/.env.tmp" "$ROOT/.env"
   else
-    printf '%s%s' "$(printf '%*s' $((n-4)) '' | tr ' ' '*')" "${s: -4}"
+    {
+      echo ""
+      echo "# ad-ops-agent: generative backend mode"
+      echo "# kie | none"
+      echo "AD_OPS_BACKEND=${backend}"
+    } >> "$ROOT/.env"
   fi
 }
 
-# ── Step 1: .env ──────────────────────────────────────────────────────────────
-if [[ ! -f "$ROOT/.env" ]]; then
-  cp "$ROOT/.env.example" "$ROOT/.env"
-  echo "Created .env from template."
-  needs_key=1
-elif grep -q "your_base64_encoded_credentials_here" "$ROOT/.env"; then
-  echo ".env exists but still has placeholder credentials."
-  needs_key=1
-else
-  echo ".env already exists with credentials — skipping prompt."
-  needs_key=0
+mark_api_skipped() {
+  # Prefer KIE if a real key is already present; otherwise none.
+  if grep -q "^KIE_API_KEY=" "$ROOT/.env" 2>/dev/null \
+    && ! grep -q "^KIE_API_KEY=your_key_here" "$ROOT/.env" 2>/dev/null \
+    && ! grep -q "^KIE_API_KEY=''" "$ROOT/.env" 2>/dev/null; then
+    set_backend kie
+  else
+    set_backend none
+  fi
+}
+
+mark_kie_enabled() {
+  set_backend kie
+}
+
+prompt_backend_choice() {
+  echo "Choose generative backend setup:"
+  echo ""
+  echo "  [1] Configure KIE.ai  (recommended — https://kie.ai/api-key)"
+  echo "  [2] Workspace only    (no API key — local skills / docs)"
+  echo ""
+  printf "Choice [1/2] (default 1): "
+  read -r choice || choice=""
+  case "${choice:-1}" in
+    2|none|skip|n|N)
+      WITH_KIE=0
+      WITH_ARCADS=0
+      ;;
+    *)
+      WITH_KIE=1
+      WITH_ARCADS=0
+      ;;
+  esac
+}
+
+# ── Step 0: choose backend mode ──────────────────────────────────────────────
+if [[ -z "$WITH_KIE" && -z "$WITH_ARCADS" ]]; then
+  if [[ -f "$ROOT/.env" ]] && grep -q '^AD_OPS_BACKEND=kie' "$ROOT/.env" 2>/dev/null \
+    && grep -q "^KIE_API_KEY=" "$ROOT/.env" 2>/dev/null \
+    && ! grep -q "^KIE_API_KEY=your_key_here" "$ROOT/.env" 2>/dev/null; then
+    echo ".env already has KIE configured — keeping it."
+    WITH_KIE=1
+    WITH_ARCADS=0
+  else
+    prompt_backend_choice
+  fi
 fi
 
-if [[ "$needs_key" == "1" ]]; then
-  echo ""
-  echo "Need an Arcads account first? Sign up here: https://arcads.ai/?via=claude-code"
-  echo "Then go to https://app.arcads.ai/settings/api and copy EITHER:"
-  echo "  • the Basic auth header (e.g. 'Basic ODQxMTg4NDExZDY1NDQ0MmJk...'), OR"
-  echo "  • the raw API key (we'll build the header for you)"
-  echo ""
+# ── Step 1: .env ─────────────────────────────────────────────────────────────
+ensure_env_file
 
-  attempts=0
-  while (( attempts < 3 )); do
-    attempts=$((attempts + 1))
-    # -s hides input so the key never echoes or lands in scrollback.
-    printf "Paste your Basic header or raw API key (input hidden, Enter to skip): "
-    read -rs input
-    printf "\n"
-
-    if [[ -z "$input" ]]; then
-      echo "Skipped — edit .env manually before using the skill."
-      break
-    fi
-
-    # Try several interpretations of the input, validate each, use whichever works.
-    candidates=()
-    if [[ "$input" == Basic\ * ]]; then
-      # Pasted with "Basic " prefix — try as-is, then strip and re-base64 in case
-      # it's a raw key the user accidentally prepended "Basic " to.
-      candidates+=("$input")
-      stripped="${input#Basic }"
-      candidates+=("Basic $(printf '%s:' "$stripped" | base64 | tr -d '\n')")
-    else
-      # No prefix. Could be (a) base64-encoded credentials already, or
-      # (b) the raw API key. Try both.
-      candidates+=("Basic $input")
-      candidates+=("Basic $(printf '%s:' "$input" | base64 | tr -d '\n')")
-    fi
-
-    basic_auth=""
-    raw_key=""
-    echo "Validating against $BASE_URL/v1/products ..."
-    for candidate in "${candidates[@]}"; do
-      if validate_auth "$candidate"; then
-        basic_auth="$candidate"
-        # If the candidate came from base64-encoding the input, the input was the raw key.
-        if [[ "$candidate" == "Basic $(printf '%s:' "$input" | base64 | tr -d '\n')" ]] \
-           || [[ "$candidate" == "Basic $(printf '%s:' "${input#Basic }" | base64 | tr -d '\n')" ]]; then
-          raw_key="${input#Basic }"
-        fi
-        break
-      fi
-    done
-
-    if [[ -n "$basic_auth" ]]; then
-      # Write Basic header (always). Also write API key if we recovered it.
-      sed "s|ARCADS_BASIC_AUTH=.*|ARCADS_BASIC_AUTH='$basic_auth'|" "$ROOT/.env" > "$ROOT/.env.tmp" \
-        && mv "$ROOT/.env.tmp" "$ROOT/.env"
-      if [[ -n "$raw_key" ]] && grep -q "^# ARCADS_API_KEY=" "$ROOT/.env"; then
-        sed "s|^# ARCADS_API_KEY=.*|ARCADS_API_KEY='$raw_key'|" "$ROOT/.env" > "$ROOT/.env.tmp" \
-          && mv "$ROOT/.env.tmp" "$ROOT/.env"
-      fi
-      chmod 600 "$ROOT/.env" 2>/dev/null || true
-      echo "✓ Valid. Saved to .env as $(mask_secret "$basic_auth")"
-      unset input basic_auth raw_key candidates candidate
-      break
-    else
-      echo "✗ Invalid credentials (Arcads rejected both header and raw-key interpretations). Attempts left: $((3 - attempts))"
-      unset input basic_auth raw_key candidates candidate
-    fi
-  done
+if [[ "$WITH_KIE" == "1" ]]; then
+  if ! grep -q '^KIE_API_KEY=' "$ROOT/.env" 2>/dev/null; then
+    {
+      echo ""
+      echo "# ── KIE.ai ───────────────────────────────────────────────────────────────────"
+      echo "# https://kie.ai/api-key"
+      echo "KIE_API_KEY=your_key_here"
+    } >> "$ROOT/.env"
+  fi
+  if grep -qE "^KIE_API_KEY=(your_key_here|'')?$" "$ROOT/.env" 2>/dev/null \
+    || grep -q "^KIE_API_KEY=your_key_here" "$ROOT/.env" 2>/dev/null; then
+    echo "Paste your KIE API key into .env (KIE_API_KEY=...) then re-run:"
+    echo "  ./scripts/check-kie-env.sh"
+  fi
+  mark_kie_enabled
+  echo "Backend mode: kie"
+else
+  mark_api_skipped
+  if grep -q '^AD_OPS_BACKEND=kie' "$ROOT/.env" 2>/dev/null; then
+    echo "Backend mode: kie (KIE_API_KEY already present)."
+  else
+    echo "Backend mode: none (no generative API required)."
+    echo "Add KIE later with: ./scripts/setup.sh --with-kie"
+  fi
 fi
 
 echo ""
@@ -119,7 +156,7 @@ echo ""
 if [[ ! -f "$ROOT/MASTER_CONTEXT.md" ]]; then
   cp "$ROOT/MASTER_CONTEXT.template.md" "$ROOT/MASTER_CONTEXT.md"
   echo "Created MASTER_CONTEXT.md from template."
-  echo "The agent will help you fill in credit costs and product info on first use."
+  echo "The agent will help you fill brand / product defaults on first use."
 else
   echo "MASTER_CONTEXT.md already exists — skipping."
 fi
@@ -131,13 +168,23 @@ echo ""
 
 echo ""
 
-# ── Step 4: Verify API connectivity ──────────────────────────────────────────
-if grep -q "your_base64_encoded_credentials_here" "$ROOT/.env" 2>/dev/null || grep -q "your_key_here" "$ROOT/.env" 2>/dev/null; then
-  echo "Credentials not yet set in .env — skipping connectivity check."
-  echo "Run ./scripts/check-arcads-env.sh after adding your credentials."
+# ── Step 4: Optional connectivity check ─────────────────────────────────────
+if [[ "$WITH_KIE" == "1" ]] || grep -q '^AD_OPS_BACKEND=kie' "$ROOT/.env" 2>/dev/null; then
+  if ! grep -q "^KIE_API_KEY=your_key_here" "$ROOT/.env" 2>/dev/null; then
+    "$ROOT/scripts/check-kie-env.sh" || true
+  else
+    echo "Skipping KIE check — replace your_key_here in .env first."
+  fi
 else
-  "$ROOT/scripts/check-arcads-env.sh"
+  echo "Skipping generative API connectivity check."
 fi
 
 echo ""
-echo "Setup complete. Open this folder in your IDE agent (Cursor, Claude Code, etc.) to start."
+echo "Setup complete."
+echo "  • Workspace: MASTER_CONTEXT.md + synced skills in .cursor/skills/"
+if grep -q '^AD_OPS_BACKEND=kie' "$ROOT/.env" 2>/dev/null; then
+  echo "  • Backend: KIE.ai (AD_OPS_BACKEND=kie)"
+else
+  echo "  • Backend: none — IDE agent + local skills only (AD_OPS_BACKEND=none)"
+fi
+echo "Open this folder in Cursor / Claude Code / your IDE agent to start."
