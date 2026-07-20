@@ -22,6 +22,7 @@ Cursor discovers project skills under **`.cursor/skills/*/SKILL.md`** (populated
 2. Shared prompting guides resolve against repo-root **`shared/skills/`**. Synced copies rewrite `../../shared/` → `../../../shared/` so markdown links keep working.
 3. Image-ad ecosystem: read **`shared/skills/image-ad-prompting/OVERVIEW.md`** before `chatgpt-image-ad`, `nano-banana-image-ad`, or `image-ad-clone`.
 4. Local multi-clip edits: **`.cursor/skills/edit-video/SKILL.md`**.
+5. Shopify storefront updates: **`.cursor/skills/shopify-store/SKILL.md`** — dry-run before writes; `check-shopify-env.sh`.
 
 Canonical sources to edit: `skills/` and `shared/skills/`. After editing, run `./scripts/sync-skill.sh` (or start a new agent session).
 

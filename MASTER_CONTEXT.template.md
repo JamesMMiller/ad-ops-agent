@@ -73,6 +73,18 @@ the file is gitignored either way.
 The access token itself (`META_ACCESS_TOKEN`) lives in `.env`, never here. Every ad the skill
 creates is **PAUSED** — review and un-pause in Meta Ads Manager.
 
+## Shopify storefront
+
+Used by **`shopify-store`** (`shared/skills/shopify-store/`) — updates products, Online Store pages, files, and theme templates via the Admin GraphQL API.
+
+- **Shop domain** (`SHOPIFY_SHOP`): _(e.g. `your-store.myshopify.com`)_
+- **Primary product handle(s)** (campaign URL locks): _(fill locally — never commit secrets)_
+- **Local project dirs:** `outputs/shopify/projects/<name>/` (gitignored)
+- **Main theme ID** (`SHOPIFY_THEME_ID` in `.env` or record GID here after `list-themes`):
+- **Storefront goals:** _(homepage hero, PDP refresh, etc.)_
+
+Client ID and client secret live in `.env` only (`SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`). Optional `SHOPIFY_THEME_ACCESS_PASSWORD` for Shopify CLI theme push fallback.
+
 
 
 ## Project snapshot — KIE.ai
