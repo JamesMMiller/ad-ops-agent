@@ -46,7 +46,10 @@ Run `bash scripts/check-shopify-env.sh` before any write.
 2. **Explicit user yes** before live writes.
 3. **Backup before overwrite** — pull current product HTML / `templates/index.json` into `outputs/shopify/<date>-<slug>/` before applying.
 4. **Never delete themes** or unpublish the live theme without user confirmation.
-5. **Secrets stay in `.env`** — never log client secret or access tokens.
+5. **Secrets stay in `.env`** — never log client secret, client ID, or access tokens (mask in check scripts).
+6. **Campaign URL lock:** If ads point at a PDP, **never change `handle` / product URL**. Update title, body, SEO, media in place only.
+7. **Draft before publish:** Default review path is a **DRAFT duplicate** (`--apply-draft`) or a local draft package under `outputs/shopify/`. **Never** set the live ACTIVE product to `DRAFT` — that breaks paid traffic.
+8. **Images:** Prefer existing product gallery. Only generate new images after user approval + credit estimate (KIE Nano Banana / ChatGPT Image).
 
 ## Workflow
 
@@ -91,23 +94,46 @@ python shared/skills/shopify-store/scripts/shopify_cli.py update-product \
   --seo-description "Four turbo fans, whisper-quiet, Type-C battery. Wear it. Forget it."
 ```
 
-### Phase 5 — Apply
+### Phase 5 — Apply (draft first)
 
-Remove `--dry-run` after user confirms. For homepage JSON:
+For neck-fan / campaign PDPs:
+
+```bash
+# 1) Preview mutations
+python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --dry-run
+
+# 2) Create DRAFT duplicate in Admin for visual review (live URL untouched)
+python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --apply-draft
+
+# 3) After approval — update LIVE product in place (handle locked)
+python shared/skills/shopify-store/scripts/apply_neck_fan_storefront.py --apply-live
+```
+
+For homepage JSON (after approval):
 
 1. Try `upsert-theme-files` with edited `templates/index.json`
 2. If exemption/permission error → use `scripts/theme_push.sh --path outputs/shopify/theme-delta/`
 
 ### Phase 6 — Assets
 
-Upload local or CDN images:
+**Default: keep existing gallery images.** If new creatives are needed:
+
+1. Pause and show **estimated KIE credits** for Nano Banana / gpt-image-2
+2. Get explicit yes
+3. Generate → upload via Files API → attach to product (without changing handle)
 
 ```bash
 python shared/skills/shopify-store/scripts/shopify_cli.py upload-file \
-  --url "https://cdn.shopify.com/s/files/..." --alt "Summer Wind neck fan lifestyle"
+  --url "https://…" --alt "Neck fan lifestyle"
 ```
 
-Attach to product via Admin (manual or follow-up `productUpdate` media workflow).
+### Auth troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `app_not_installed` | Dev Dashboard → Release version with scopes → **Install app** on the target shop |
+| `shop_not_permitted` | App and store must be in the **same organization** |
+| Wrong shop | `SHOPIFY_SHOP` must be exact `*.myshopify.com` subdomain |
 
 ## CLI reference
 

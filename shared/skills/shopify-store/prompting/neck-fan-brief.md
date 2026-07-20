@@ -1,23 +1,33 @@
 # Neck fan — Summer Wind / Lazy Mute (storefront brief)
 
 **Store:** Our Tech Accessories  
-**Default product handle:** `lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan`  
-**Product URL path:** `/products/lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan`
+**Default product handle (LOCKED — active ads):** `lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan`  
+**Product URL (LOCKED):** `/products/lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan`
 
 ## Brand
 
 - **Store name:** Our Tech Accessories
-- **Product line:** Summer Wind (badge on product)
-- **Model name:** Lazy Mute hanging neck fan
+- **Live listing title:** Folding Hanging Neck Electric Fan
+- Creatives may show **Summer Wind** badge — only claim on PDP if visible on the physical SKU / photos
 
-## Product facts
+## Live product facts (from storefront — prefer these over creative VO)
 
-- Hands-free U-shaped neck fan; white shell, grey inner lining, rose-gold **Summer Wind** badge
-- Four independent turbo fans — front and rear mesh vents
-- Whisper-quiet motors
-- Adjustable angle / flexible joint
-- USB Type-C charging; hours of runtime (use "all-day" only if verified in listing policy)
-- Leafless / bladeless hanging design
+- Hands-free hanging neck fan (earphone-inspired fit)
+- Leafless design; quieter/safer vs blade fans; hair less likely to catch
+- Annular / multi-direction air outlets
+- Food-grade silicone mid-section; adjustable width/angle
+- Noise: below 36dB
+- Power: USB 5V; battery life approx. **8–12 hours**
+- Colours: **Black, Pink, White**
+- Size: 21 × 14 × 61 mm
+- Box: fan + power cord + manual + packing box
+- Price (check live): £34.98
+
+## Campaign / publish rules
+
+- **Never change handle or URL** while ads point here
+- **Never set live product to DRAFT** — use `--apply-draft` (duplicate) or local draft package
+- **Images:** reuse gallery by default; generate new only after credit approval
 
 ## Approved voiceover lines (from video creative)
 

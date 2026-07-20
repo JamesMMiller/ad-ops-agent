@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Apply neck-fan storefront updates: PDP copy + campaign landing page.
-Always backs up current product JSON to outputs/shopify/ before writes.
+Neck-fan PDP content update — campaign URL / handle locked.
 
-Usage:
-  python apply_neck_fan_storefront.py --dry-run
-  python apply_neck_fan_storefront.py --apply   # requires explicit flag
+Modes:
+  --dry-run       Print mutations only (no writes)
+  --apply-draft   Create DRAFT duplicate product for Admin review (live URL unchanged)
+  --apply-live    Update LIVE product title/body/SEO only (handle never changes)
+
+Never sets the live product status to DRAFT (would break active ads).
 """
 
 from __future__ import annotations
@@ -28,25 +30,53 @@ load_dotenv()
 from lib import shopify_api as api  # noqa: E402
 
 HANDLE = "lazy-mute-outdoor-sports-usb-folding-leafless-hanging-neck-electric-fan"
-LANDING_HANDLE = "summer-wind-neck-fan"
 CONTENT_DIR = SCRIPT_DIR.parent / "content" / "neck-fan"
+
+PROPOSED_TITLE = "Folding Hanging Neck Electric Fan — Hands-Free Cooling"
+SEO_TITLE = "Folding Neck Fan | Hands-Free USB Cooling | Our Tech Accessories"
+SEO_DESCRIPTION = (
+    "Leafless hanging neck fan with quiet motors (under 36dB), adjustable fit, "
+    "and 8–12 hour USB battery. Black, Pink, or White. Free your hands — stay cool."
+)
+
+
+def create_draft_duplicate(description_html: str, *, dry_run: bool) -> dict:
+    draft_handle = f"{HANDLE}-draft-review"
+    q = """
+    mutation productCreate($input: ProductInput!) {
+      productCreate(input: $input) {
+        product { id title handle status }
+        userErrors { field message }
+      }
+    }
+    """
+    variables = {
+        "input": {
+            "title": f"[DRAFT REVIEW] {PROPOSED_TITLE}",
+            "handle": draft_handle,
+            "descriptionHtml": description_html,
+            "status": "DRAFT",
+            "seo": {"title": SEO_TITLE, "description": SEO_DESCRIPTION},
+        }
+    }
+    return api.graphql(q, variables, dry_run=dry_run)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--dry-run", action="store_true")
-    group.add_argument("--apply", action="store_true")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--apply-draft", action="store_true")
+    mode.add_argument("--apply-live", action="store_true")
     args = parser.parse_args()
-    dry_run = args.dry_run
 
+    dry_run = bool(args.dry_run)
     slug = f"{date.today().isoformat()}-neck-fan-storefront"
     out_dir = api.resolve_output_dir(slug)
-
     description_html = (CONTENT_DIR / "description.html").read_text(encoding="utf-8")
-    landing_html = (CONTENT_DIR / "landing-page.html").read_text(encoding="utf-8")
 
     print(f"Session output: {out_dir}")
+    print(f"LOCKED handle: {HANDLE}")
 
     prod = api.get_product_by_handle(HANDLE)
     if not prod:
@@ -56,65 +86,43 @@ def main() -> int:
     product_id = prod["id"]
     detail = api.get_product_detail(product_id)
     api.dump_json(out_dir / "product-before.json", detail)
-    print(f"Backed up product → {out_dir / 'product-before.json'}")
+    print(f"Backed up live product → {out_dir / 'product-before.json'}")
 
-    title = "Summer Wind Neck Fan — Hands-Free USB Cooling"
-    seo_title = "Summer Wind Neck Fan | Hands-Free USB Cooling | Our Tech Accessories"
-    seo_description = (
-        "Four turbo fans front and rear, whisper-quiet motors, adjustable angle, "
-        "Type-C battery. Free your hands — stay cool anywhere."
-    )
+    if args.apply_live or dry_run:
+        live_result = api.update_product(
+            product_id,
+            title=PROPOSED_TITLE,
+            description_html=description_html,
+            seo_title=SEO_TITLE,
+            seo_description=SEO_DESCRIPTION,
+            dry_run=dry_run or not args.apply_live,
+        )
+        api.dump_json(out_dir / "live-update-result.json", live_result)
+        print(
+            "Live product update:",
+            "DRY-RUN" if (dry_run or not args.apply_live) else "APPLIED (handle unchanged)",
+        )
 
-    product_result = api.update_product(
-        product_id,
-        title=title,
-        description_html=description_html,
-        seo_title=seo_title,
-        seo_description=seo_description,
-        dry_run=dry_run,
-    )
-    api.dump_json(out_dir / "product-update-result.json", product_result)
-    print("Product update:", "DRY-RUN" if dry_run else "APPLIED")
-
-    existing_page = api.get_page_by_handle(LANDING_HANDLE)
-    page_id = existing_page["id"] if existing_page else None
-    page_result = api.upsert_page(
-        title="Summer Wind Neck Fan",
-        handle=LANDING_HANDLE,
-        body_html=landing_html,
-        page_id=page_id,
-        is_published=True,
-        dry_run=dry_run,
-    )
-    api.dump_json(out_dir / "landing-page-result.json", page_result)
-    print("Landing page:", "DRY-RUN" if dry_run else "APPLIED", f"(handle: {LANDING_HANDLE})")
-
-    theme_id = api.get_main_theme_id()
-    if theme_id:
-        index_json = api.get_theme_file(theme_id, "templates/index.json")
-        if index_json:
-            (out_dir / "index-before.json").write_text(index_json, encoding="utf-8")
-            print(f"Backed up templates/index.json → {out_dir / 'index-before.json'}")
-            print(
-                "Homepage: backup only in this script. Edit index.json sections manually "
-                "or use shopify_cli.py upsert-theme-files / theme_push.sh after review."
-            )
-        else:
-            print("Could not read templates/index.json (check read_themes scope).")
-    else:
-        print("No MAIN theme id — set SHOPIFY_THEME_ID in .env")
+    if args.apply_draft or dry_run:
+        draft_result = create_draft_duplicate(
+            description_html,
+            dry_run=dry_run or not args.apply_draft,
+        )
+        api.dump_json(out_dir / "draft-duplicate-result.json", draft_result)
+        print(
+            "Draft duplicate:",
+            "DRY-RUN" if (dry_run or not args.apply_draft) else "CREATED (live URL untouched)",
+        )
 
     plan = {
-        "product_handle": HANDLE,
-        "landing_page_handle": LANDING_HANDLE,
-        "landing_url": f"/pages/{LANDING_HANDLE}",
-        "dry_run": dry_run,
+        "live_handle_locked": HANDLE,
+        "live_url_locked": True,
+        "mode": "dry-run" if dry_run else ("apply-draft" if args.apply_draft else "apply-live"),
+        "images": "reuse_existing_gallery",
+        "never_set_live_product_status_to_draft": True,
     }
     api.dump_json(out_dir / "plan.json", plan)
     print(json.dumps(plan, indent=2))
-
-    if dry_run:
-        print("\nRe-run with --apply after user confirms.")
     return 0
 
 

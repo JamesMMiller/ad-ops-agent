@@ -26,7 +26,7 @@ for var in SHOPIFY_SHOP SHOPIFY_CLIENT_ID SHOPIFY_CLIENT_SECRET; do
   if [[ -z "${!var:-}" ]]; then
     echo "  MISSING: $var"
     fail=1
-  elif [[ "$var" == *SECRET* ]]; then
+  elif [[ "$var" == *SECRET* || "$var" == *CLIENT_ID* ]]; then
     echo "  OK: $var is set"
   else
     echo "  OK: $var = ${!var}"
