@@ -82,6 +82,7 @@ Quick map:
     - `image-ad-clone` — reverse-engineer existing ads into reusable templates
   - `edit-video` — local ffmpeg soft-stitch / crossfade (no API).
   - `shopify-store` — Shopify Admin API for products, pages, files, metafields, theme templates. Quality bar: `shared/skills/shopify-store/prompting/pdp-quality-bar.md`. Check: `bash shared/skills/shopify-store/scripts/check-shopify-env.sh`.
+  - `blog-writing` — journey blog posts (James Miller / Our Tech Accessories) + Hashnode GraphQL draft-first publish. Source: `blog/posts/`. Check: `bash shared/skills/blog-writing/scripts/check-hashnode-env.sh`.
   - `meta-ad-builder` — publish creatives as PAUSED Meta ads (optional).
 - **Reference images:** public URLs only for KIE — see *Image hosting* in `MASTER_CONTEXT.md`.
 - **Meta video default:** `aspect_ratio: "1:1"` for IG + Facebook feed dual-placement.

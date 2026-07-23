@@ -62,7 +62,8 @@ flowchart TB
 ad-ops-agent/
 ├── skills/                         # CANONICAL — edit API / workflow skills here
 │   └── kie-external-api/           #   Primary generative API skill
-├── shared/skills/                  # Cross-cutting recipes (image-ad, edit-video, meta, …)
+├── shared/skills/                  # Cross-cutting recipes (image-ad, edit-video, meta, blog, …)
+├── blog/                           # Journey blog source (committed posts + Hashnode meta)
 ├── scripts/                        # setup, sync-skill, check-kie-env
 ├── .cursor/                        # Cursor hooks + rules; skills/ is generated
 ├── .claude/                        # Claude Code wiring; skills/ is generated
@@ -192,6 +193,7 @@ flowchart TD
 | KIE prompting / endpoints | `skills/kie-external-api/` → `./scripts/sync-skill.sh` |
 | Soft-stitch behaviour | `shared/skills/edit-video/` |
 | Shopify products / pages / theme | `shared/skills/shopify-store/` |
+| Journey blog / Hashnode publish | `shared/skills/blog-writing/` + `blog/posts/` |
 | Cursor session behaviour | `.cursor/hooks/`, `.cursor/rules/` |
 | Agent blurb / identity | `AGENTS.tail.md`, README, this file |
 | First-run UX | `scripts/setup.sh` |
@@ -216,5 +218,7 @@ flowchart TD
 | [AGENTS.md](AGENTS.md) | Multi-agent operating instructions |
 | `skills/kie-external-api/SKILL.md` + `reference.md` | KIE backend contract |
 | `shared/skills/shopify-store/SKILL.md` | Shopify storefront workflow |
+| `shared/skills/blog-writing/SKILL.md` | Journey blog + Hashnode publish |
+| [blog/README.md](blog/README.md) | Blog purpose, voice, Hashnode checklist |
 | [shared/skills/image-ad-prompting/OVERVIEW.md](shared/skills/image-ad-prompting/OVERVIEW.md) | Image-ad decision tree |
 | [MASTER_CONTEXT.template.md](MASTER_CONTEXT.template.md) | Workspace memory shape |
