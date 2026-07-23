@@ -31,3 +31,4 @@ scripts/regen-*.sh
 .tmp-kie-src/
 logs/kie-api.jsonl
 .venv-shopify/
+.cache/
