@@ -1,0 +1,49 @@
+{
+  "title": "Can a Lead Developer Build a Dropshipping Store Without Building a Dropshipping Store?",
+  "subtitle": "Evenings, curiosity, and trying not to build another carnival of fake urgency.",
+  "slug": "lead-dev-dropshipping-calm-store",
+  "tags": [
+    {
+      "slug": "dropshipping",
+      "name": "Dropshipping"
+    },
+    {
+      "slug": "shopify",
+      "name": "Shopify"
+    },
+    {
+      "slug": "side-project",
+      "name": "Side Project"
+    },
+    {
+      "slug": "uk",
+      "name": "UK"
+    },
+    {
+      "slug": "ai",
+      "name": "AI"
+    }
+  ],
+  "coverImageURL": "https://cloudmate-test.s3.us-east-1.amazonaws.com/res/hashnode/image/upload/v1784844983718/2e668461-dd86-415f-94e3-69fce58ef6ef.png",
+  "seo": {
+    "title": "Building a calm dropshipping store as a UK lead developer",
+    "description": "James Miller documents evenings spent building Our Tech Accessories and an IDE ad-ops agent, without the classic dropshipping mess."
+  },
+  "originalArticleURL": "",
+  "enableToc": true,
+  "status": "draft",
+  "hashnode": {
+    "draftId": "6a6292bb3f7afc8fe2a239c8",
+    "postId": "",
+    "url": "",
+    "publishedAt": "",
+    "imageUrls": {
+      "about-desktop.png": "https://cloudmate-test.s3.us-east-1.amazonaws.com/res/hashnode/image/upload/v1784844981622/4ae55a08-c7ba-4b13-950f-52d0229fa575.png",
+      "collections-cooling-desktop.png": "https://cloudmate-test.s3.us-east-1.amazonaws.com/res/hashnode/image/upload/v1784844982799/e643ac09-12f3-40c0-b601-7467f4003c40.png",
+      "homepage-desktop.png": "https://cloudmate-test.s3.us-east-1.amazonaws.com/res/hashnode/image/upload/v1784844983718/2e668461-dd86-415f-94e3-69fce58ef6ef.png",
+      "pdp-neck-fan-desktop.png": "https://cloudmate-test.s3.us-east-1.amazonaws.com/res/hashnode/image/upload/v1784844984749/a2793b37-f678-4690-b1ef-b4ca863ca3b1.png",
+      "pdp-neck-fan-mobile.png": "https://cloudmate-test.s3.us-east-1.amazonaws.com/res/hashnode/image/upload/v1784844985965/ab1e9a19-d11e-48cd-b142-066e967a6c03.png"
+    }
+  },
+  "notes": "First journey post. No money figures. Tax = research only. Screenshots in images/. On Hashnode publish, upload images and swap relative paths for HTTPS URLs. Publish only after Hashnode Pro + PAT."
+}
