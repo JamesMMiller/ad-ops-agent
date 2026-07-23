@@ -23,6 +23,7 @@ Cursor discovers project skills under **`.cursor/skills/*/SKILL.md`** (populated
 3. Image-ad ecosystem: read **`shared/skills/image-ad-prompting/OVERVIEW.md`** before `chatgpt-image-ad`, `nano-banana-image-ad`, or `image-ad-clone`.
 4. Local multi-clip edits: **`.cursor/skills/edit-video/SKILL.md`**.
 5. Shopify storefront updates: **`.cursor/skills/shopify-store/SKILL.md`** — dry-run before writes; `check-shopify-env.sh`.
+6. Journey blog posts / Hashnode: **`.cursor/skills/blog-writing/SKILL.md`** — draft under `blog/posts/`; Hashnode draft before publish; `check-hashnode-env.sh`.
 
 Canonical sources to edit: `skills/` and `shared/skills/`. After editing, run `./scripts/sync-skill.sh` (or start a new agent session).
 

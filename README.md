@@ -2,7 +2,7 @@
 
 Brief, generate, organize, and iterate AI marketing creatives **from your IDE** (Cursor, Claude Code, or any assistant that reads `AGENTS.md`).
 
-**Primary backend:** [KIE.ai](https://kie.ai) — Seedance, Veo, Sora, Kling, Nano Banana, ChatGPT Image 2, and more via one API key. Pair that with a **37-template** Meta image-ad library, **Pixar / claymation** pipelines, local **ffmpeg** edit helpers, optional **Meta ad publishing**, and a **Shopify storefront** skill.
+**Primary backend:** [KIE.ai](https://kie.ai) — Seedance, Veo, Sora, Kling, Nano Banana, ChatGPT Image 2, and more via one API key. Pair that with a **37-template** Meta image-ad library, **Pixar / claymation** pipelines, local **ffmpeg** edit helpers, optional **Meta ad publishing**, a **Shopify storefront** skill, and a **Hashnode journey blog** (organic-traffic experiment; see [Step 11](#step-11--journey-blog-optional-but-part-of-the-experiment)).
 
 **Architecture (how agents, skills, and APIs fit together):** **[ARCHITECTURE.md](ARCHITECTURE.md)**
 
@@ -264,6 +264,46 @@ Copy-paste starters once setup is done:
 | Stitch | "Soft-crossfade stitch these clips in outputs/…" |
 | Shopify PDP | "Dry-run apply project outputs/shopify/projects/…" |
 | Meta | "Publish this file as a PAUSED Meta ad in ad set …" |
+| Journey blog | "Write the next Hashnode build-diary post from this week's changelog" |
+
+---
+
+### Step 11 — Journey blog (optional, but part of the experiment)
+
+This repo also ships a **public build diary**: candid posts about evenings spent trying to make a bit of money online with [Our Tech Accessories](https://ourtechaccessories.com), without building another carnival-style dropshipping store.
+
+**Why it lives in this repo:** James (UK lead developer by day) added blogging here on purpose, next to the ad-ops and Shopify tooling, to see whether writing openly about the journey can generate **organic traffic** back to the store. Same agent desk that writes PDPs and drafts Meta creatives can also draft Hashnode posts from the changelog.
+
+**Honest expectation:** organic discovery is the goal; conversion from blog readers is not. If someone finds the diary, they will probably enjoy the scars and the tooling notes. They are very unlikely to buy a neck fan. That is fine. The blog is an SEO / storytelling experiment, not a secret sales funnel pretending to be a diary.
+
+| Piece | Path |
+|-------|------|
+| Post source (committed) | [`blog/posts/`](blog/) |
+| Voice + publish skill | [`shared/skills/blog-writing/`](shared/skills/blog-writing/SKILL.md) |
+| Host | **Hashnode** — [Evening Ops](https://eveningops.hashnode.dev) (`eveningops.hashnode.dev`; **Pro** required for API writes) |
+| Branding | [`blog/branding/`](blog/branding/) — EO mark, lockups, favicon, OG |
+| First post | [`blog/posts/2026-07-23-lead-dev-dropshipping-calm-store/`](blog/posts/2026-07-23-lead-dev-dropshipping-calm-store/) |
+
+Setup:
+
+1. Read [`blog/README.md`](blog/README.md). Publication is **Evening Ops** at `eveningops.hashnode.dev` (Pro required for API writes).
+2. Add to `.env`:
+
+```bash
+HASHNODE_PAT=...
+HASHNODE_PUBLICATION_ID=...
+HASHNODE_HOST=eveningops.hashnode.dev
+```
+
+3. Verify and draft:
+
+```bash
+bash shared/skills/blog-writing/scripts/check-hashnode-env.sh
+python3 shared/skills/blog-writing/scripts/hashnode_cli.py upsert-draft \
+  --project blog/posts/<YYYY-MM-DD>-<slug> --dry-run
+```
+
+Always upsert a **Hashnode draft** first; publish only with an explicit yes. Example chat: *"Write the next Hashnode build-diary post from this week's changelog."*
 
 ---
 
@@ -278,6 +318,8 @@ Copy-paste starters once setup is done:
 | `shared/skills/edit-video/` | Local ffmpeg soft-stitch (no API) |
 | `shared/skills/pixar-style-ad/` · `claymation-ad/` · `caption-video/` | Multi-step creative pipelines |
 | `shared/skills/shopify-store/` | Shopify Admin API — products, pages, theme files |
+| `shared/skills/blog-writing/` | Journey blog voice + Hashnode draft/publish CLI |
+| `blog/` | Committed post source (`blog/posts/<date>-<slug>/`) |
 | `shared/skills/meta-ad-builder/` | Meta Marketing API publish (PAUSED) |
 | `MASTER_CONTEXT.template.md` | Template for workspace memory |
 | `scripts/setup.sh` · `check-kie-env.sh` · `sync-skill.sh` | Setup, auth check, skill sync |
@@ -291,7 +333,7 @@ KIE authenticates with a Bearer token. Paste once into `.env` as `KIE_API_KEY` �
 - Keys: **[kie.ai/api-key](https://kie.ai/api-key)**
 - Pricing / logs: **[kie.ai/pricing](https://kie.ai/pricing)** · **[kie.ai/logs](https://kie.ai/logs)** · **[kie.ai/market](https://kie.ai/market)**
 
-For Meta publishing, add `META_ACCESS_TOKEN` / `META_AD_ACCOUNT_ID`. For Shopify, add `SHOPIFY_*` (see `.env.example`).
+For Meta publishing, add `META_ACCESS_TOKEN` / `META_AD_ACCOUNT_ID`. For Shopify, add `SHOPIFY_*`. For the journey blog, add `HASHNODE_PAT` / `HASHNODE_PUBLICATION_ID` (see `.env.example`).
 
 ## Project memory
 
