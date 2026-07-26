@@ -1,0 +1,46 @@
+{
+  "title": "The Fun Bit: Running a Store From Cursor With Skills and APIs",
+  "subtitle": "Why I chose platforms I can call from an IDE agent, how the workflows actually run, and why the original skill-pack author still gets the credit.",
+  "slug": "cursor-skills-ad-ops-workflow",
+  "tags": [
+    {
+      "slug": "cursor",
+      "name": "Cursor"
+    },
+    {
+      "slug": "ai",
+      "name": "AI"
+    },
+    {
+      "slug": "shopify",
+      "name": "Shopify"
+    },
+    {
+      "slug": "side-project",
+      "name": "Side Project"
+    },
+    {
+      "slug": "developer",
+      "name": "Developer"
+    },
+    {
+      "slug": "meta-ads",
+      "name": "Meta Ads"
+    }
+  ],
+  "coverImageURL": "",
+  "seo": {
+    "title": "Running a calm tech store from Cursor with skills and APIs",
+    "description": "A UK lead developer walks through ad-ops-agent: skills, API-first platforms, mermaid workflows, and example prompts from the evening ops desk."
+  },
+  "originalArticleURL": "",
+  "enableToc": true,
+  "status": "draft",
+  "hashnode": {
+    "draftId": "6a63e9a9d911af30376cde53",
+    "postId": "",
+    "url": "",
+    "publishedAt": ""
+  },
+  "notes": "Second Evening Ops post. Tooling-focused by James request. Credit Mr. Paid Social. No money figures. Mermaid diagrams in body. Draft to Hashnode only after James yes if unsure; skill default is upsert-draft after quality gate."
+}

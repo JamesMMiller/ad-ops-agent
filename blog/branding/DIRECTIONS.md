@@ -57,6 +57,21 @@ Do not swap marks between store and blog.
 2. Favicon → `assets/eo-favicon.png` or `eo-mark-a-squircle.png`.
 3. Social / OG → `assets/eo-og-banner.png`.
 4. Optional dark header → `eo-lockup-horizontal-inverse.png`.
+5. **Series** (dashboard → Add series) — use fields below; social image → `assets/eo-series-banner.png`.
+
+### Series form (Add series)
+
+Hashnode’s GraphQL API cannot create series on `gql-beta`; create once in the UI, then attach posts with `seriesId`.
+
+| Field | Value |
+|-------|--------|
+| **Title** | Evening Ops |
+| **Series desc** | After-work build diary from a UK lead developer: Our Tech Accessories, the ad-ops-agent repo, and whether a calm store can work without the classic dropshipping carnival. |
+| **Page slug** | `evening-ops` (UI may show `/evening-ops`) |
+| **Post order** | Old first |
+| **Meta title** | Evening Ops: after-work build diary |
+| **Meta desc** | James Miller documents evenings spent building a calm tech store and an IDE ad-ops agent. |
+| **Social media image** | `assets/eo-series-banner.png` |
 
 ## Assets
 
@@ -70,6 +85,7 @@ See [`assets/`](assets/).
 | `eo-lockup-horizontal.png` | Primary lockup (light) |
 | `eo-lockup-horizontal-inverse.png` | Lockup (dark) |
 | `eo-favicon.png` | Tab / app icon |
-| `eo-og-banner.png` | Social share |
+| `eo-og-banner.png` | Publication social share |
+| `eo-series-banner.png` | Series social / OG image |
 
 These are generative drafts suitable for Hashnode now. If a mark becomes permanent, redraw as true vector SVG later for crispness at all sizes.
