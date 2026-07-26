@@ -5,9 +5,11 @@ description: >-
   Marketing API, plus research and ad-copy support. Uploads an image or video,
   builds a multi-variant TEXT_LIQUIDITY creative, and creates a PAUSED ad in an
   existing ad set. Also pulls top-performing ads (ranked by ROAS) and competitor
-  ads from the Ad Library to inform copy. Use when the user asks to deploy /
-  publish / launch a creative as a Meta or Facebook ad, build a Meta ad, push a
-  video or image into an ad set, pull their top ads, or research competitor ads.
+  ads from the Ad Library to inform copy. Builds a local research browser +
+  Cursor canvas so the user can browse competitor creatives and cite them in
+  chat. Use when the user asks to deploy / publish / launch a creative as a Meta
+  or Facebook ad, build a Meta ad, push a video or image into an ad set, pull
+  their top ads, research competitor ads, or browse Ad Library research.
   Not for generating creative (use the image/video skills) and not for writing
   AdTable/Airtable rows (use adtable-light).
 ---
@@ -27,6 +29,7 @@ Trigger on phrases like:
 - "create a Meta ad with this image and copy"
 - "pull my top-performing ads" / "what are my best ads by ROAS"
 - "research competitor ads" / "pull <brand>'s ads from the Ad Library"
+- "browse Ad Library research" / "open the research UI"
 
 Do **not** use this skill to *generate* creative — that's `pixar-style-ad`,
 `claymation-ad`, `generate-youtube-thumbnail`, `uni1-image-ad`, etc. Do not use
@@ -40,7 +43,9 @@ it to write AdTable/Airtable rows — that's `adtable-light`. This skill is the
    3-description frameworks and the `--copy-file` JSON shape.
 3. **[reference/deploy-patterns.md](reference/deploy-patterns.md)** — creative
    spec mechanics, video polling, retry, failure modes.
-4. **[reference/meta-api-cheatsheet.md](reference/meta-api-cheatsheet.md)** — the
+4. **[reference/ad-library-research.md](reference/ad-library-research.md)** —
+   keyword sweeps, `browser.html`, Cursor canvas from `canvas-data.json`.
+5. **[reference/meta-api-cheatsheet.md](reference/meta-api-cheatsheet.md)** — the
    full Meta Marketing API reference (campaigns, ad sets, ads, enums, gotchas,
    Ad Library). Consult as needed; don't read end-to-end.
 
@@ -49,8 +54,10 @@ it to write AdTable/Airtable rows — that's `adtable-light`. This skill is the
 - **Env** (in `.env` — see your repo's `.env.example`):
   - `META_ACCESS_TOKEN` (required) — long-lived token with `ads_management` scope
   - `META_AD_ACCOUNT_ID` (required) — with or without the `act_` prefix
-  - `META_PAGE_ID`, `META_IG_USER_ID`, `META_PIXEL_ID` (optional defaults for deploy)
-  - `META_API_VERSION` (optional, default `v23.0`)
+  - `META_PAGE_ID`, `META_IG_USER_ID`, `META_PIXEL_ID` (optional defaults for deploy / CAPI)
+  - `META_API_VERSION` (optional, default `v25.0`)
+  - `META_CAPI_ACCESS_TOKEN` (optional) — dedicated Conversions API token from
+    Events Manager → Settings; falls back to `META_ACCESS_TOKEN`
 - **Python deps:** `python3 -m pip install -r scripts/requirements.txt`
 - **A target ad set** that already exists. The skill deploys ads into an existing
   ad set — it does not create campaigns or ad sets. If the user needs a new ad
@@ -60,6 +67,28 @@ it to write AdTable/Airtable rows — that's `adtable-light`. This skill is the
 
 Run `bash scripts/check-meta-env.sh` to verify credentials before anything else.
 
+## Purchase tracking (Shopify ↔ Meta)
+
+Keep the Facebook & Instagram sales channel live with **Maximum** data sharing
+and pixel `META_PIXEL_ID`. Do **not** paste a second Meta pixel into the theme.
+
+When a paid Shopify order does not appear as a Meta `Purchase` (or after the
+next real sale), reconcile and optionally backfill:
+
+```bash
+# Compare paid Shopify orders vs Meta Purchase totals (max 7-day lookback)
+python scripts/audit-purchase-tracking.py --days 7
+
+# Dry-run a Conversions API Purchase for one order (default — no send)
+python scripts/send-purchase-capi.py --order-name '#1002'
+
+# Send for real (after dry-run review). Prefer a rotated CAPI token.
+python scripts/send-purchase-capi.py --order-name '#1002' --send
+```
+
+Scripts never print raw email/phone. Meta Stats API is aggregate-only, so a
+count match is strong evidence, not an order-level receipt.
+
 ## Workflow
 
 ### Phase 1 — Research (optional, when copy should model winners)
@@ -68,12 +97,28 @@ Run `bash scripts/check-meta-env.sh` to verify credentials before anything else.
 # Rank the account's ads and pull the winning copy
 python scripts/pull-top-ads.py --date-preset last_30d --min-spend 100 --limit 15
 
-# Pull a competitor's ads from the Ad Library
+# Category keyword sweep + deep page pulls + local browse UI
+python scripts/sweep-ad-library.py --country GB --days 180 --open-browser
+
+# Narrow: one competitor page from the Ad Library
 python scripts/pull-competitor-ads.py --pages "BrandName" --limit 50
 ```
 
-Both write JSON under `OUTPUT_BASE` (or `./outputs/meta-ads/`). Read the top-ad
-`copy` fields to identify winning hook/proof/CTA patterns before writing new copy.
+Account top-ads write under `OUTPUT_BASE` (or `./outputs/meta-ads/`). Ad Library
+sweeps write under `outputs/research/<slug>/` and **always** build
+`browser.html` + `canvas-data.json` (see
+[ad-library-research.md](reference/ad-library-research.md)).
+
+**After every Ad Library research run:**
+
+1. Optionally enrich creatives: `enrich-ad-library-media.py --rebuild-browser`
+   (Meta’s API does not return image/video files — this captures them locally).
+2. Open / point the user at `browser.html` for the full corpus + inline assets.
+3. Refresh the Cursor canvas from `canvas-data.json` so they can browse beside
+   chat and cite ads back into this conversation.
+4. Write `REPORT.md` gleanings (longevity + on-category copy > raw volume).
+
+Rebuild UI only: `python scripts/build-ad-library-browser.py --run-dir <dir> --open`.
 
 ### Phase 2 — Copy
 
@@ -112,7 +157,8 @@ python scripts/deploy-ad.py \
 | "Deploy this creative to Meta" + copy provided | Phase 3 only |
 | "Build a Meta ad, write the copy too" | Phase 2 → 3 |
 | "Make ads modeled on my winners" | Phase 1 → 2 → 3 |
-| "What are my best ads / competitor research" | Phase 1 only |
+| "What are my best ads / competitor research" | Phase 1 only (+ browser/canvas) |
+| "Browse / open Ad Library research UI" | Rebuild browser + canvas from run dir |
 
 ## Safety rules
 

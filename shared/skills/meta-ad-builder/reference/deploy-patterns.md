@@ -90,4 +90,4 @@ research scripts with `Retry-After` / fixed backoff.
 | Empty response body | Treat as transient; retry. |
 | `Creative should not include standard enhancements` (3858504) | `standard_enhancements` is deprecated — use `creative_features_spec` (the skill already does). |
 | Image ad has no destination | `link_urls` missing from `asset_feed_spec` — the skill adds it for images. |
-| API version errors | Bump `META_API_VERSION` (default `v23.0`); the old Ad Builder Agent used `v21.0`. |
+| API version errors | Bump `META_API_VERSION` (default `v25.0`); the old Ad Builder Agent used `v21.0`. |

@@ -1,0 +1,291 @@
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Divider,
+  Grid,
+  H1,
+  H2,
+  H3,
+  Link,
+  Pill,
+  Row,
+  Select,
+  Spacer,
+  Stack,
+  Stat,
+  Table,
+  Text,
+  TextInput,
+  useCanvasState,
+  useHostTheme,
+} from "cursor/canvas";
+
+const DATA = __DATA__ as {
+  meta: {
+    title: string;
+    country: string | null;
+    date_min: string | null;
+    date_max: string | null;
+    run_dir: string;
+    built_at: string;
+    total_ads: number;
+    shown_ads: number;
+    media_count?: number;
+    categories: Array<{ id: string; ad_count: number; page_count?: number }>;
+  };
+  ads: Array<{
+    id: string;
+    page: string;
+    cat: string;
+    days: number | null;
+    title: string;
+    body: string;
+    platforms: string[];
+    snapshot: string | null;
+    library?: string | null;
+    preview?: string | null;
+    video?: string | null;
+    has_media?: boolean;
+  }>;
+  top_pages: Array<{
+    page_id: string;
+    page_name: string;
+    ad_count: number;
+    categories: string[];
+    max_days_live: number | null;
+    avg_days_live: number | null;
+  }>;
+};
+
+type Ad = (typeof DATA.ads)[number];
+
+function matches(ad: Ad, q: string, cat: string, minDays: number): boolean {
+  if (cat !== "all") {
+    const cats = (ad.cat || "").split(",").map((s) => s.trim());
+    if (!cats.includes(cat)) return false;
+  }
+  if ((ad.days ?? 0) < minDays) return false;
+  if (!q) return true;
+  const hay = [ad.page, ad.id, ad.cat, ad.title, ad.body].join("\n").toLowerCase();
+  return hay.includes(q.toLowerCase());
+}
+
+export default function AdLibraryResearch() {
+  const theme = useHostTheme();
+  const [q, setQ] = useCanvasState("q", "");
+  const [cat, setCat] = useCanvasState("cat", "all");
+  const [minDays, setMinDays] = useCanvasState("minDays", "0");
+  const [selectedId, setSelectedId] = useCanvasState("selectedId", "");
+
+  const min = Number(minDays) || 0;
+  const filtered = DATA.ads.filter((ad) => matches(ad, q, cat, min));
+  const selected =
+    filtered.find((a) => a.id === selectedId) ||
+    DATA.ads.find((a) => a.id === selectedId) ||
+    filtered[0];
+
+  const catOptions = [
+    {
+      value: "all",
+      label: `All (${DATA.meta.total_ads} in run / ${DATA.ads.length} in canvas)`,
+    },
+    ...DATA.meta.categories.map((c) => ({
+      value: c.id,
+      label: `${c.id} (${c.ad_count})`,
+    })),
+  ];
+
+  const listRows = filtered.slice(0, 40).map((ad) => [
+    String(ad.days ?? "—"),
+    ad.page || "—",
+    ad.cat || "—",
+    <Text key={ad.id} truncate>
+      {ad.title || "—"}
+    </Text>,
+    <Button
+      key={`sel-${ad.id}`}
+      variant={selected?.id === ad.id ? "primary" : "secondary"}
+      onClick={() => setSelectedId(ad.id)}
+    >
+      View
+    </Button>,
+  ]);
+
+  const rowTone = filtered.slice(0, 40).map((ad) =>
+    selected && selected.id === ad.id ? ("info" as const) : undefined,
+  );
+
+  return (
+    <Stack gap={24} style={{ padding: 24, maxWidth: 1100 }}>
+      <Stack gap={8}>
+        <H1>Ad Library research</H1>
+        <Text tone="secondary">
+          GB sweep {DATA.meta.date_min} → {DATA.meta.date_max}. Canvas shows a
+          subset ({DATA.meta.shown_ads} of {DATA.meta.total_ads}). Meta’s API
+          does not return image/video files — open the Library link for
+          creatives, or use browser.html after media enrich
+          ({DATA.meta.media_count ?? 0} local previews in this run).
+        </Text>
+        <Row gap={8} style={{ flexWrap: "wrap" }}>
+          <Pill tone="info">Country {DATA.meta.country}</Pill>
+          <Pill>{DATA.meta.total_ads} ads in run</Pill>
+          <Pill>{filtered.length} match filters</Pill>
+        </Row>
+      </Stack>
+
+      <Grid columns={4} gap={12}>
+        {DATA.meta.categories.map((c) => (
+          <Stat key={c.id} label={c.id} value={String(c.ad_count)} />
+        ))}
+      </Grid>
+
+      <Stack gap={10}>
+        <H2>Browse ads</H2>
+        <Row gap={8} style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <TextInput
+            value={q}
+            onChange={setQ}
+            placeholder="Search page, body, title, id…"
+            style={{ flex: 1, minWidth: 200 }}
+          />
+          <Select
+            value={cat}
+            onChange={setCat}
+            options={catOptions}
+            style={{ minWidth: 220 }}
+          />
+          <TextInput
+            value={minDays}
+            onChange={setMinDays}
+            type="number"
+            placeholder="Min days"
+            style={{ width: 100 }}
+          />
+        </Row>
+        <Text tone="tertiary" size="small">
+          Select View on a row, then cite the ad id + copy in chat. Snapshot
+          links open Meta Ad Library creative preview.
+        </Text>
+      </Stack>
+
+      <Grid columns={2} gap={16}>
+        <Stack gap={8}>
+          <H3>Matching ads</H3>
+          <Text tone="tertiary" size="small">
+            Top 40 after filters · longest-live first in source data
+          </Text>
+          <Table
+            headers={["Days", "Page", "Cat", "Title", ""]}
+            rows={listRows}
+            rowTone={rowTone}
+            columnAlign={["right", "left", "left", "left", "right"]}
+            striped
+            stickyHeader
+            emptyMessage="No ads match these filters."
+          />
+        </Stack>
+
+        <Stack gap={12}>
+          {selected ? (
+            <Card>
+              <CardHeader
+                trailing={
+                  selected.days != null ? (
+                    <Pill tone="success">{selected.days}d</Pill>
+                  ) : undefined
+                }
+              >
+                {selected.page || "Ad"}
+              </CardHeader>
+              <CardBody>
+                <Stack gap={10}>
+                  <Text tone="tertiary" size="small">
+                    {selected.id}
+                  </Text>
+                  <Row gap={8} style={{ flexWrap: "wrap" }}>
+                    {selected.cat ? <Pill>{selected.cat}</Pill> : null}
+                    {(selected.platforms || []).slice(0, 3).map((p) => (
+                      <Pill key={p}>{p}</Pill>
+                    ))}
+                  </Row>
+                  {selected.title ? (
+                    <Stack gap={4}>
+                      <H3>Title</H3>
+                      <Text>{selected.title}</Text>
+                    </Stack>
+                  ) : null}
+                  {selected.body ? (
+                    <Stack gap={4}>
+                      <H3>Body</H3>
+                      <Text
+                        tone="secondary"
+                        style={{ whiteSpace: "pre-wrap" }}
+                      >
+                        {selected.body}
+                      </Text>
+                    </Stack>
+                  ) : (
+                    <Text tone="tertiary">No body text in API response.</Text>
+                  )}
+                  {selected.library ? (
+                    <Link href={selected.library}>Open Meta creative (Ad Library)</Link>
+                  ) : selected.snapshot ? (
+                    <Link href={selected.snapshot}>Open Meta snapshot</Link>
+                  ) : null}
+                  {selected.has_media ? (
+                    <Text tone="tertiary" size="small">
+                      Local preview captured — open browser.html in the run folder to view image/video inline.
+                    </Text>
+                  ) : (
+                    <Text tone="tertiary" size="small">
+                      No local media yet. Run enrich-ad-library-media.py, then rebuild the browser.
+                    </Text>
+                  )}
+                  <Text
+                    tone="tertiary"
+                    size="small"
+                    style={{
+                      borderTop: `1px solid ${theme.stroke.secondary}`,
+                      paddingTop: 8,
+                    }}
+                  >
+                    Cite in chat: Ad Library ref: {selected.page} ({selected.id})
+                  </Text>
+                </Stack>
+              </CardBody>
+            </Card>
+          ) : (
+            <Text tone="secondary">No ads match these filters.</Text>
+          )}
+        </Stack>
+      </Grid>
+
+      <Divider />
+
+      <Stack gap={8}>
+        <H2>Top pages</H2>
+        <Text tone="tertiary" size="small">
+          Source: top-pages.json · ranked by ad volume and longevity
+        </Text>
+        <Table
+          headers={["Page", "Ads", "Max days", "Categories"]}
+          rows={DATA.top_pages.map((p) => [
+            p.page_name,
+            String(p.ad_count ?? "—"),
+            String(p.max_days_live ?? "—"),
+            (p.categories || []).join(", "),
+          ])}
+          columnAlign={["left", "right", "right", "left"]}
+          striped
+        />
+      </Stack>
+
+      <Spacer />
+      <Text tone="tertiary" size="small">
+        Run dir: {DATA.meta.run_dir}
+      </Text>
+    </Stack>
+  );
+}

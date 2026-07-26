@@ -145,6 +145,10 @@ Writes `hashnode.postId`, `url`, `publishedAt` into `post.json`.
 | `publish --project <dir>` | `publishDraft` (or `publishPost` if no draft) |
 | `update-post --project <dir>` | Update an already-published post |
 
+### Series note (Hashnode)
+
+`gql-beta` supports `seriesId` on draft/post inputs and can **list** series, but has **no `createSeries` mutation**. Create the series once in the Hashnode dashboard (Blog → Series), then set `seriesId` via `updateDraft` / `updatePost` / `publishPost`.
+
 All write commands accept `--dry-run` (builds payload, no mutation).
 
 ## Logging

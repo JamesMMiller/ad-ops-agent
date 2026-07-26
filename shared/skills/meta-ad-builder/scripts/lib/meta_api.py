@@ -7,19 +7,195 @@ video-processing polling, and ad creation with transient-error retry/backoff.
 Credentials come from environment (load a .env first with python-dotenv):
   META_ACCESS_TOKEN   (required) — long-lived user/system token, ads_management scope
   META_AD_ACCOUNT_ID  (required) — with or without the act_ prefix
-  META_API_VERSION    (optional) — Graph API version, default v23.0
+  META_API_VERSION    (optional) — Graph API version, default v25.0
+  META_PIXEL_ID       (optional) — Pixel / dataset ID for CAPI + tracking
+  META_CAPI_ACCESS_TOKEN (optional) — dedicated Conversions API token;
+                          falls back to META_ACCESS_TOKEN when unset
 """
 
 import base64
+import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
-API_VERSION = os.getenv("META_API_VERSION", "v23.0")
+API_VERSION = os.getenv("META_API_VERSION", "v25.0")
 BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
+
+
+def get_pixel_id() -> str:
+    pixel = (os.getenv("META_PIXEL_ID") or "").strip()
+    if not pixel:
+        raise RuntimeError("META_PIXEL_ID not set — see check-meta-env.sh / .env.example")
+    return pixel
+
+
+def get_capi_access_token() -> str:
+    """Prefer a dedicated CAPI token; fall back to the Marketing API token."""
+    token = (os.getenv("META_CAPI_ACCESS_TOKEN") or "").strip()
+    if token:
+        return token
+    return get_access_token()
+
+
+def sha256_norm(value: str | None) -> str | None:
+    """Normalize then SHA-256 hash a customer match key. Returns None if empty."""
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def normalize_phone(phone: str | None, default_country: str = "44") -> str | None:
+    """Digits-only E.164-ish phone for Meta hashing (country code required)."""
+    if not phone:
+        return None
+    digits = re.sub(r"\D+", "", str(phone))
+    if not digits:
+        return None
+    # UK local numbers often start with 0 — strip and prefix 44
+    if digits.startswith("0") and default_country == "44":
+        digits = default_country + digits.lstrip("0")
+    elif not digits.startswith(default_country) and len(digits) <= 10 and default_country == "44":
+        digits = default_country + digits
+    return digits or None
+
+
+def normalize_order_event_id(order_id: str | int | None) -> str:
+    """Stable Meta event_id from a Shopify order id (numeric string, no # / gid)."""
+    if order_id is None:
+        raise ValueError("order_id is required for event_id")
+    text = str(order_id).strip()
+    if text.startswith("gid://"):
+        text = text.rsplit("/", 1)[-1]
+    text = text.lstrip("#").strip()
+    # OrderIdentity / Order numeric
+    if not text.isdigit():
+        m = re.search(r"(\d+)$", text)
+        if m:
+            text = m.group(1)
+    if not text:
+        raise ValueError(f"Could not normalize order_id={order_id!r}")
+    return text
+
+
+def extract_fbclid(url: str | None) -> str | None:
+    if not url:
+        return None
+    try:
+        qs = parse_qs(urlparse(url).query)
+    except Exception:
+        return None
+    vals = qs.get("fbclid") or []
+    return vals[0] if vals else None
+
+
+def build_fbc_from_fbclid(fbclid: str, creation_time_ms: int | None = None) -> str:
+    ts = creation_time_ms if creation_time_ms is not None else int(time.time() * 1000)
+    return f"fb.1.{ts}.{fbclid}"
+
+
+def send_capi_events(
+    events: list[dict[str, Any]],
+    *,
+    pixel_id: str | None = None,
+    access_token: str | None = None,
+    test_event_code: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """POST one or more events to Meta Conversions API.
+
+    dry_run=True returns the redacted payload without calling Meta.
+    """
+    pixel = pixel_id or get_pixel_id()
+    token = access_token or get_capi_access_token()
+    body: dict[str, Any] = {"data": events}
+    if test_event_code:
+        body["test_event_code"] = test_event_code
+
+    url = f"{BASE_URL}/{pixel}/events"
+    if dry_run:
+        return {
+            "dry_run": True,
+            "url": url,
+            "pixel_id": pixel,
+            "event_count": len(events),
+            "event_names": [e.get("event_name") for e in events],
+            "event_ids": [e.get("event_id") for e in events],
+            "has_test_event_code": bool(test_event_code),
+            # Never echo user_data / tokens
+            "custom_data_keys": [
+                sorted((e.get("custom_data") or {}).keys()) for e in events
+            ],
+            "user_data_keys": [
+                sorted((e.get("user_data") or {}).keys()) for e in events
+            ],
+        }
+
+    resp = requests.post(
+        url,
+        params={"access_token": token},
+        json=body,
+        timeout=60,
+    )
+    try:
+        data = resp.json()
+    except json.JSONDecodeError:
+        raise RuntimeError(f"CAPI non-JSON HTTP {resp.status_code}: {resp.text[:400]}")
+    if resp.status_code >= 400 or "error" in data:
+        err = data.get("error") or data
+        raise RuntimeError(f"CAPI error HTTP {resp.status_code}: {json.dumps(err)[:800]}")
+    return data
+
+
+def pixel_event_totals(
+    *,
+    pixel_id: str | None = None,
+    start_unix: int | None = None,
+    end_unix: int | None = None,
+    days: int = 7,
+) -> dict[str, Any]:
+    """Aggregate event counts for a pixel (last N days, max 7 per Meta stats API)."""
+    pixel = pixel_id or get_pixel_id()
+    end = end_unix if end_unix is not None else int(time.time())
+    start = start_unix if start_unix is not None else end - min(days, 7) * 86400
+    token = get_access_token()
+    url = f"{BASE_URL}/{pixel}/stats"
+    resp = requests.get(
+        url,
+        params={
+            "access_token": token,
+            "aggregation": "event_total_counts",
+            "start_time": start,
+            "end_time": end,
+        },
+        timeout=60,
+    )
+    data = resp.json()
+    if "error" in data:
+        raise RuntimeError(f"Pixel stats error: {json.dumps(data['error'])[:500]}")
+    counts: dict[str, int] = {}
+    for block in data.get("data") or []:
+        for row in block.get("data") or []:
+            name = row.get("value")
+            if not name:
+                continue
+            counts[name] = counts.get(name, 0) + int(row.get("count") or 0)
+    return {
+        "pixel_id": pixel,
+        "start_unix": start,
+        "end_unix": end,
+        "counts": counts,
+        "purchase": counts.get("Purchase", 0),
+    }
 
 
 def get_access_token():

@@ -103,6 +103,39 @@ def me_publications() -> dict[str, Any]:
     return _request(query)
 
 
+def create_series(input_data: dict[str, Any]) -> dict[str, Any]:
+    query = """
+    mutation CreateSeries($input: CreateSeriesInput!) {
+      createSeries(input: $input) {
+        series { id name slug }
+      }
+    }
+    """
+    data = _request(query, {"input": input_data})
+    return data["createSeries"]["series"]
+
+
+def publication_series(host: str | None = None) -> list[dict[str, Any]]:
+    """List series for the configured publication (by host or env HASHNODE_HOST)."""
+    h = (host or os.environ.get("HASHNODE_HOST") or "").strip()
+    if not h:
+        raise HashnodeError("HASHNODE_HOST is required to list series")
+    query = """
+    query PubSeries($host: String!) {
+      publication(host: $host) {
+        id
+        seriesList(first: 20) {
+          edges { node { id name slug } }
+        }
+      }
+    }
+    """
+    data = _request(query, {"host": h})
+    pub = data.get("publication") or {}
+    edges = ((pub.get("seriesList") or {}).get("edges")) or []
+    return [e.get("node") or {} for e in edges]
+
+
 def create_draft(input_data: dict[str, Any]) -> dict[str, Any]:
     query = """
     mutation CreateDraft($input: CreateDraftInput!) {
