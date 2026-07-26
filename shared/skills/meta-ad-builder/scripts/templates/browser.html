@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ad Library research browser</title>
+<style>
+  :root {
+    --bg: #0e1013;
+    --panel: #161a20;
+    --panel2: #1c222b;
+    --text: #e8eaed;
+    --muted: #9aa3af;
+    --line: #2a323d;
+    --accent: #6b9cff;
+    --accent-dim: #243552;
+    --chip: #222933;
+    --ok: #7dcea0;
+    --warn: #e6c07b;
+    --danger: #e06c75;
+    --pin: #f0c674;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  a { color: var(--accent); }
+  .app {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    height: 100vh;
+  }
+  header {
+    background: rgba(14,16,19,.94);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 14px 8px;
+  }
+  .title-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  }
+  h1 { margin: 0; font-size: 16px; font-weight: 650; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center;
+  }
+  .toolbar input[type="search"],
+  .toolbar input[type="number"],
+  .toolbar select {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 10px;
+  }
+  .toolbar input[type="search"] { flex: 1 1 220px; min-width: 160px; }
+  .toolbar input[type="number"] { width: 78px; }
+  .seg {
+    display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  }
+  .seg button {
+    background: var(--panel); border: 0; color: var(--muted);
+    padding: 7px 10px; border-right: 1px solid var(--line);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.active { background: var(--accent-dim); color: var(--text); }
+  .chiprow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--chip);
+    color: var(--muted); border-radius: 999px; padding: 3px 10px; font-size: 12px;
+  }
+  .chip.active { color: var(--text); border-color: var(--accent); background: var(--accent-dim); }
+  .chip.pin-chip.active { border-color: var(--pin); color: var(--pin); }
+  .filters-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  .filters-bar label { color: var(--muted); font-size: 12px; display: inline-flex; gap: 6px; align-items: center; }
+  .filters-bar select, .filters-bar input {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+  }
+  .stats { color: var(--muted); font-size: 12px; margin-left: auto; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+    min-height: 0;
+  }
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  }
+  #listPane { overflow: auto; min-height: 0; border-right: 1px solid var(--line); }
+  #detail {
+    overflow: auto; min-height: 0; background: var(--panel); padding: 14px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    padding: 12px;
+  }
+  .list { display: flex; flex-direction: column; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .card:hover { border-color: #3a4554; }
+  .card.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .card.pinned { border-color: #5a4a20; }
+  .thumb {
+    aspect-ratio: 1 / 1;
+    background: #0a0c0f;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .thumb img, .thumb video {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .thumb .ph {
+    color: var(--muted); font-size: 11px; text-align: center; padding: 12px;
+  }
+  .badge {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(0,0,0,.7); color: var(--text);
+    border-radius: 999px; padding: 2px 7px; font-size: 10px;
+  }
+  .badge.video { background: rgba(40,70,140,.85); }
+  .badge.days { left: auto; right: 8px; color: var(--ok); }
+  .badge.signal-strong { top: auto; bottom: 8px; left: 8px; background: rgba(40,100,60,.9); color: var(--ok); }
+  .badge.signal-watch { top: auto; bottom: 8px; left: 8px; background: rgba(100,80,30,.9); color: var(--warn); }
+  .badge.signal-fresh { top: auto; bottom: 8px; left: 8px; background: rgba(60,60,70,.85); color: var(--muted); }
+  .signal-pill {
+    display: inline-block; border-radius: 999px; padding: 1px 7px; font-size: 10px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .signal-pill.strong { color: var(--ok); border-color: #3a6a4a; }
+  .signal-pill.watch { color: var(--warn); border-color: #6a5a30; }
+  .card-body { padding: 9px 10px 10px; }
+  .page { font-weight: 600; font-size: 13px; }
+  .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .title { margin-top: 6px; font-size: 12px; }
+  .body { color: var(--muted); margin-top: 4px; font-size: 11px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .row-item {
+    display: grid;
+    grid-template-columns: 72px 1fr auto;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    align-items: center;
+  }
+  .row-item:hover { background: var(--panel); }
+  .row-item.selected { background: var(--panel2); box-shadow: inset 3px 0 0 var(--accent); }
+  .row-thumb {
+    width: 72px; height: 72px; border-radius: 8px; overflow: hidden; background: #0a0c0f;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .row-thumb img, .row-thumb video { width: 100%; height: 100%; object-fit: cover; }
+  .row-thumb .ph { font-size: 10px; color: var(--muted); text-align: center; padding: 4px; }
+  .days { color: var(--ok); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty { padding: 28px; color: var(--muted); }
+  .detail-h { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 6px 10px; font-size: 12px; margin: 12px 0; }
+  .kv dt { color: var(--muted); }
+  .block {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; margin: 8px 0 12px; white-space: pre-wrap; font-size: 13px;
+  }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    text-decoration: none; background: var(--accent-dim); color: var(--text);
+    border: 1px solid var(--accent); border-radius: 8px; padding: 7px 11px; font-size: 12px;
+  }
+  .btn.ghost { background: transparent; border-color: var(--line); color: var(--muted); }
+  .btn.warn { border-color: var(--warn); color: var(--warn); background: transparent; }
+  .preview-box {
+    background: #0a0c0f; border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; margin: 8px 0 12px; min-height: 180px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .preview-box img, .preview-box video { max-width: 100%; max-height: 420px; display: block; }
+  .preview-box .ph { padding: 24px; color: var(--muted); text-align: center; font-size: 12px; }
+  .note {
+    border: 1px solid var(--line); background: var(--bg); border-radius: 8px;
+    padding: 8px 10px; color: var(--muted); font-size: 11px; margin: 8px 0 12px;
+  }
+  .toast {
+    position: fixed; bottom: 16px; right: 16px; background: var(--panel2);
+    border: 1px solid var(--line); padding: 8px 12px; border-radius: 8px;
+    font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20;
+  }
+  .toast.show { opacity: 1; }
+  .kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 10px; color: var(--muted); }
+  .pages-table { width: 100%; border-collapse: collapse; }
+  .pages-table th, .pages-table td {
+    text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 12px;
+  }
+  .pages-table th { color: var(--muted); font-weight: 500; }
+  .pages-table tr:hover td { background: var(--panel2); cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title-row">
+      <div>
+        <h1 id="title">Ad Library research</h1>
+        <div class="sub" id="subtitle"></div>
+      </div>
+      <div class="sub">Keys: <span class="kbd">j</span>/<span class="kbd">k</span> · <span class="kbd">/</span> search · <span class="kbd">p</span> pin · <span class="kbd">o</span> open creative</div>
+    </div>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search page, body, title, ad id…" />
+      <div class="seg" id="viewSeg">
+        <button type="button" data-view="grid" class="active">Grid</button>
+        <button type="button" data-view="list">List</button>
+        <button type="button" data-view="pages">Pages</button>
+      </div>
+      <div class="seg" id="mediaSeg">
+        <button type="button" data-media="all" class="active">All media</button>
+        <button type="button" data-media="local">Has preview</button>
+        <button type="button" data-media="missing">Needs enrich</button>
+      </div>
+      <label class="sub">Min days <input id="minDays" type="number" min="0" value="0" /></label>
+      <select id="sort">
+        <option value="signal">Sort: success proxy</option>
+        <option value="days">Sort: days live</option>
+        <option value="reach">Sort: EU reach</option>
+        <option value="page">Sort: page</option>
+        <option value="media">Sort: has media</option>
+      </select>
+    </div>
+    <div class="chiprow" id="cats"></div>
+  </header>
+
+  <div class="filters-bar">
+    <label>Platform
+      <select id="platform">
+        <option value="all">All</option>
+        <option value="facebook">Facebook</option>
+        <option value="instagram">Instagram</option>
+        <option value="messenger">Messenger</option>
+        <option value="audience_network">Audience Network</option>
+        <option value="threads">Threads</option>
+      </select>
+    </label>
+    <label>Page
+      <select id="pageFilter"><option value="all">All pages</option></select>
+    </label>
+    <button type="button" class="chip pin-chip" id="pinsOnly">Pins only</button>
+    <button type="button" class="btn ghost" id="clearPins">Clear pins</button>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <main>
+    <section id="listPane"><div id="rows"></div></section>
+    <aside id="detail"><div class="empty">Select an ad to inspect copy and creative.</div></aside>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const DATA = __DATA_JSON__;
+const STORAGE_KEY = "adlib-browser:" + (DATA.meta.run_dir || "default");
+
+const state = {
+  selectedId: null,
+  activeCat: "all",
+  view: "grid",
+  media: "all",
+  pinsOnly: false,
+  pins: new Set(JSON.parse(localStorage.getItem(STORAGE_KEY + ":pins") || "[]")),
+};
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 1600);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied for chat");
+  } catch {
+    toast("Copy failed");
+  }
+}
+
+function savePins() {
+  localStorage.setItem(STORAGE_KEY + ":pins", JSON.stringify([...state.pins]));
+}
+
+function mediaFor(ad) {
+  return (DATA.media && DATA.media[ad.id]) || ad.media || null;
+}
+
+function hasLocalMedia(ad) {
+  const m = mediaFor(ad);
+  return !!(m && (m.preview || m.video || m.snapshot_png));
+}
+
+function previewUrl(ad) {
+  const m = mediaFor(ad);
+  if (!m) return null;
+  return m.preview || m.snapshot_png || null;
+}
+
+function videoUrl(ad) {
+  const m = mediaFor(ad);
+  return m && m.video ? m.video : null;
+}
+
+function libraryUrl(ad) {
+  return ad.library_url || (`https://www.facebook.com/ads/library/?id=${ad.id}`);
+}
+
+function pageLibraryUrl(ad) {
+  if (ad.page_library_url) return ad.page_library_url;
+  if (!ad.page_id) return null;
+  const c = DATA.meta.country || "GB";
+  return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${encodeURIComponent(c)}&view_all_page_id=${ad.page_id}`;
+}
+
+function citeSnippet(ad) {
+  const body = (ad.bodies && ad.bodies[0]) || "";
+  const title = (ad.titles && ad.titles[0]) || "";
+  return [
+    `Ad Library ref: ${ad.page_name || "?"} (${ad.id})`,
+    ad.category ? `Category: ${ad.category}` : null,
+    ad.days_live != null ? `Days live: ${ad.days_live}` : null,
+    title ? `Title: ${title}` : null,
+    body ? `Body:\n${body.slice(0, 1200)}` : null,
+    `Library: ${libraryUrl(ad)}`,
+    ad.snapshot_url ? `Snapshot: ${ad.snapshot_url}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+function matches(ad) {
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const minDays = Number(document.getElementById("minDays").value || 0);
+  const platform = document.getElementById("platform").value;
+  const page = document.getElementById("pageFilter").value;
+
+  if (state.activeCat !== "all") {
+    const cats = (ad.category || "").split(",").map(s => s.trim());
+    if (!cats.includes(state.activeCat)) return false;
+  }
+  if ((ad.days_live || 0) < minDays) return false;
+  if (state.pinsOnly && !state.pins.has(ad.id)) return false;
+  if (platform !== "all" && !(ad.platforms || []).includes(platform)) return false;
+  if (page !== "all" && ad.page_id !== page) return false;
+  if (state.media === "local" && !hasLocalMedia(ad)) return false;
+  if (state.media === "missing" && hasLocalMedia(ad)) return false;
+  if (!q) return true;
+  const hay = [
+    ad.page_name, ad.id, ad.category, ad.title_preview, ad.body_preview,
+    ...(ad.bodies || []), ...(ad.titles || []), ...(ad.descriptions || [])
+  ].join("\n").toLowerCase();
+  return hay.includes(q);
+}
+
+function filtered() {
+  const sort = document.getElementById("sort").value;
+  let rows = DATA.ads.filter(matches);
+  rows.sort((a, b) => {
+    if (sort === "page") return (a.page_name || "").localeCompare(b.page_name || "");
+    if (sort === "reach") return (b.eu_reach || 0) - (a.eu_reach || 0);
+    if (sort === "media") return Number(hasLocalMedia(b)) - Number(hasLocalMedia(a));
+    if (sort === "days") return (b.days_live || 0) - (a.days_live || 0);
+    // success proxy
+    return (b.signal_score || 0) - (a.signal_score || 0);
+  });
+  return rows;
+}
+
+function signalBadge(ad) {
+  const label = ad.signal_label || ((ad.days_live || 0) >= 21 ? "strong" : (ad.days_live || 0) >= 7 ? "watch" : "fresh");
+  const text = label === "strong" ? "21d+ survivor" : label === "watch" ? "7d+ running" : "fresh / test";
+  return `<span class="badge signal-${label}">${text}</span>`;
+}
+
+function thumbHtml(ad, compact) {
+  const v = videoUrl(ad);
+  const img = previewUrl(ad);
+  const cls = compact ? "row-thumb" : "thumb";
+  if (v && !compact) {
+    return `<div class="${cls}">
+      <span class="badge video">VIDEO</span>
+      <span class="badge days">${ad.days_live != null ? ad.days_live + "d" : "—"}</span>
+      ${signalBadge(ad)}
+      <video src="${esc(v)}" poster="${esc(img || "")}" muted playsinline preload="metadata"></video>
+    </div>`;
+  }
+  if (img) {
+    return `<div class="${cls}">
+      ${!compact && v ? `<span class="badge video">VIDEO</span>` : (!compact && hasLocalMedia(ad) ? `<span class="badge">IMAGE</span>` : "")}
+      ${!compact ? `<span class="badge days">${ad.days_live != null ? ad.days_live + "d" : "—"}</span>` : ""}
+      ${!compact ? signalBadge(ad) : ""}
+      <img src="${esc(img)}" alt="" loading="lazy" />
+    </div>`;
+  }
+  return `<div class="${cls}"><div class="ph">${compact ? "No preview" : "No local preview<br/>Open Meta creative →"}</div>${!compact ? `<span class="badge days">${ad.days_live != null ? ad.days_live + "d" : "—"}</span>${signalBadge(ad)}` : ""}</div>`;
+}
+
+function renderCats() {
+  const wrap = document.getElementById("cats");
+  const cats = [{ id: "all", label: `All (${DATA.ads.length})` }]
+    .concat((DATA.meta.categories || []).map(c => ({
+      id: c.id, label: `${c.id} (${c.ad_count ?? "?"})`
+    })));
+  wrap.innerHTML = cats.map(c =>
+    `<button type="button" class="chip ${c.id === state.activeCat ? "active" : ""}" data-cat="${esc(c.id)}">${esc(c.label)}</button>`
+  ).join("");
+  wrap.querySelectorAll(".chip").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.activeCat = btn.dataset.cat;
+      render();
+    });
+  });
+}
+
+function fillPageFilter() {
+  const sel = document.getElementById("pageFilter");
+  const current = sel.value || "all";
+  const pages = new Map();
+  for (const ad of DATA.ads) {
+    if (!ad.page_id) continue;
+    if (!pages.has(ad.page_id)) pages.set(ad.page_id, { id: ad.page_id, name: ad.page_name || ad.page_id, n: 0 });
+    pages.get(ad.page_id).n += 1;
+  }
+  const opts = [...pages.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  sel.innerHTML = `<option value="all">All pages</option>` +
+    opts.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (${p.n})</option>`).join("");
+  sel.value = [...sel.options].some(o => o.value === current) ? current : "all";
+}
+
+function renderPages() {
+  const pages = DATA.top_pages || [];
+  const root = document.getElementById("rows");
+  if (!pages.length) {
+    root.innerHTML = `<div class="empty">No top-pages.json in this run.</div>`;
+    return;
+  }
+  root.innerHTML = `<table class="pages-table">
+    <thead><tr><th>Page</th><th>Ads</th><th>Max days</th><th>Categories</th></tr></thead>
+    <tbody>
+      ${pages.map(p => `<tr data-page="${esc(p.page_id)}">
+        <td>${esc(p.page_name)}</td>
+        <td>${esc(p.ad_count)}</td>
+        <td>${esc(p.max_days_live ?? "—")}</td>
+        <td>${esc((p.categories || []).join(", "))}</td>
+      </tr>`).join("")}
+    </tbody>
+  </table>`;
+  root.querySelectorAll("tr[data-page]").forEach(tr => {
+    tr.addEventListener("click", () => {
+      state.view = "grid";
+      document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("active", b.dataset.view === "grid"));
+      document.getElementById("pageFilter").value = tr.dataset.page;
+      render();
+    });
+  });
+}
+
+function renderList(rows) {
+  const withMedia = rows.filter(hasLocalMedia).length;
+  document.getElementById("stats").textContent =
+    `${rows.length} ads · ${withMedia} with local preview · ${state.pins.size} pinned`;
+
+  if (state.view === "pages") {
+    renderPages();
+    return;
+  }
+
+  const root = document.getElementById("rows");
+  if (!rows.length) {
+    root.innerHTML = `<div class="empty">No ads match these filters.</div>`;
+    return;
+  }
+
+  if (state.view === "list") {
+    root.className = "list";
+    root.innerHTML = rows.map(ad => `
+      <article class="row-item ${ad.id === state.selectedId ? "selected" : ""} ${state.pins.has(ad.id) ? "pinned" : ""}" data-id="${esc(ad.id)}">
+        ${thumbHtml(ad, true)}
+        <div>
+          <div class="page">${esc(ad.page_name || "(no page)")}${state.pins.has(ad.id) ? " ★" : ""}</div>
+          <div class="meta">${esc(ad.category || "uncategorised")} · ${esc((ad.platforms || []).slice(0,3).join(", ") || "—")}</div>
+          ${ad.title_preview ? `<div class="title">${esc(ad.title_preview)}</div>` : ""}
+          ${ad.body_preview ? `<div class="body">${esc(ad.body_preview)}</div>` : ""}
+        </div>
+        <div class="days">${ad.days_live != null ? ad.days_live + "d" : "—"}</div>
+      </article>
+    `).join("");
+  } else {
+    root.className = "grid";
+    root.innerHTML = rows.map(ad => `
+      <article class="card ${ad.id === state.selectedId ? "selected" : ""} ${state.pins.has(ad.id) ? "pinned" : ""}" data-id="${esc(ad.id)}">
+        ${thumbHtml(ad, false)}
+        <div class="card-body">
+          <div class="page">${esc(ad.page_name || "(no page)")}${state.pins.has(ad.id) ? " ★" : ""}</div>
+          <div class="meta">${esc(ad.category || "uncategorised")}</div>
+          ${ad.title_preview ? `<div class="title">${esc(ad.title_preview)}</div>` : ""}
+          ${ad.body_preview ? `<div class="body">${esc(ad.body_preview)}</div>` : ""}
+        </div>
+      </article>
+    `).join("");
+  }
+
+  root.querySelectorAll("[data-id]").forEach(el => {
+    el.addEventListener("click", () => {
+      state.selectedId = el.dataset.id;
+      render();
+    });
+  });
+}
+
+function renderDetail(ad) {
+  const box = document.getElementById("detail");
+  if (!ad) {
+    box.innerHTML = `<div class="empty">Select an ad to inspect copy and creative.</div>`;
+    return;
+  }
+  const m = mediaFor(ad);
+  const img = previewUrl(ad);
+  const vid = videoUrl(ad);
+  let preview;
+  if (vid) {
+    preview = `<div class="preview-box"><video src="${esc(vid)}" poster="${esc(img || "")}" controls playsinline></video></div>`;
+  } else if (img) {
+    preview = `<div class="preview-box"><img src="${esc(img)}" alt="Creative preview" /></div>`;
+  } else {
+    preview = `<div class="preview-box"><div class="ph">
+      Meta’s Ad Library API does not return image/video files.<br/><br/>
+      Open the Meta creative below, or run media enrich:<br/>
+      <code>enrich-ad-library-media.py --run-dir … --limit 40</code>
+    </div></div>`;
+  }
+
+  const bodies = (ad.bodies || []).map(b => `<div class="block">${esc(b)}</div>`).join("") || `<div class="block">No body text in API response.</div>`;
+  const titles = (ad.titles || []).map(t => `<div class="block">${esc(t)}</div>`).join("") || "";
+  const descs = (ad.descriptions || []).map(t => `<div class="block">${esc(t)}</div>`).join("") || "";
+  const pinned = state.pins.has(ad.id);
+
+  box.innerHTML = `
+    <h2 class="detail-h">${esc(ad.page_name || "Ad")}</h2>
+    <div class="meta">${esc(ad.id)}</div>
+    ${preview}
+    <div class="note">
+      Creatives live on Meta. Local previews come from <code>media/</code> after
+      <code>enrich-ad-library-media.py</code>. Snapshot tokens expire — prefer the public Library link.
+    </div>
+    <div class="actions">
+      <a class="btn" href="${esc(libraryUrl(ad))}" target="_blank" rel="noopener">Open Meta creative</a>
+      ${pageLibraryUrl(ad) ? `<a class="btn ghost" href="${esc(pageLibraryUrl(ad))}" target="_blank" rel="noopener">Page in Ad Library</a>` : ""}
+      ${ad.snapshot_url ? `<a class="btn ghost" href="${esc(ad.snapshot_url)}" target="_blank" rel="noopener">API snapshot</a>` : ""}
+      <button type="button" class="btn ${pinned ? "warn" : "ghost"}" id="togglePin">${pinned ? "Unpin" : "Pin"}</button>
+      <button type="button" class="btn ghost" id="copyCite">Copy cite</button>
+      <button type="button" class="btn ghost" id="copyId">Copy id</button>
+    </div>
+    <dl class="kv">
+      <dt>Category</dt><dd>${esc(ad.category || "—")}</dd>
+      <dt>Days live</dt><dd>${ad.days_live != null ? ad.days_live : "—"}</dd>
+      <dt>EU reach</dt><dd>${ad.eu_reach != null ? ad.eu_reach : "—"}</dd>
+      <dt>Success proxy</dt><dd>
+        <span class="signal-pill ${esc(ad.signal_label || "")}">${esc(ad.signal_label || "—")}</span>
+        score ${ad.signal_score != null ? ad.signal_score : "—"}
+        <div class="meta" style="margin-top:4px">Not ROAS — longevity + EU reach only. Commercial ads hide spend/impressions.</div>
+      </dd>
+      <dt>Started</dt><dd>${esc(ad.start || "—")}</dd>
+      <dt>Platforms</dt><dd>${esc((ad.platforms || []).join(", ") || "—")}</dd>
+      <dt>Local media</dt><dd>${m ? (vid ? "video" : "image/snapshot") : "none — enrich to capture"}</dd>
+    </dl>
+    <h3 style="margin:14px 0 6px;font-size:12px;color:var(--muted)">Titles</h3>
+    ${titles || `<div class="empty">No titles</div>`}
+    <h3 style="margin:14px 0 6px;font-size:12px;color:var(--muted)">Bodies</h3>
+    ${bodies}
+    ${descs ? `<h3 style="margin:14px 0 6px;font-size:12px;color:var(--muted)">Descriptions</h3>${descs}` : ""}
+  `;
+  document.getElementById("copyCite")?.addEventListener("click", () => copyText(citeSnippet(ad)));
+  document.getElementById("copyId")?.addEventListener("click", () => copyText(ad.id));
+  document.getElementById("togglePin")?.addEventListener("click", () => {
+    if (state.pins.has(ad.id)) state.pins.delete(ad.id); else state.pins.add(ad.id);
+    savePins();
+    render();
+  });
+}
+
+function selectedFrom(rows) {
+  return rows.find(a => a.id === state.selectedId)
+    || DATA.ads.find(a => a.id === state.selectedId)
+    || rows[0]
+    || null;
+}
+
+function render() {
+  const rows = filtered();
+  if (state.selectedId && !rows.find(a => a.id === state.selectedId) && rows[0]) {
+    // keep selection if still in full dataset; otherwise move to first filtered
+  }
+  renderCats();
+  renderList(rows);
+  const ad = selectedFrom(rows);
+  if (ad) state.selectedId = ad.id;
+  renderDetail(state.view === "pages" ? null : ad);
+  document.getElementById("pinsOnly").classList.toggle("active", state.pinsOnly);
+}
+
+function moveSelection(delta) {
+  const rows = filtered();
+  if (!rows.length) return;
+  let idx = rows.findIndex(a => a.id === state.selectedId);
+  if (idx < 0) idx = 0;
+  else idx = Math.max(0, Math.min(rows.length - 1, idx + delta));
+  state.selectedId = rows[idx].id;
+  render();
+  const el = document.querySelector(`[data-id="${CSS.escape(state.selectedId)}"]`);
+  el?.scrollIntoView({ block: "nearest" });
+}
+
+(function init() {
+  const m = DATA.meta || {};
+  document.getElementById("title").textContent = m.title || "Ad Library research";
+  const mediaCount = DATA.media ? Object.keys(DATA.media).length : 0;
+  const bits = [
+    m.country && `Country ${m.country}`,
+    (m.date_min && m.date_max) && `${m.date_min} → ${m.date_max}`,
+    `${DATA.ads.length} ads`,
+    mediaCount ? `${mediaCount} local media` : "no local media yet",
+    "success proxy = days live + EU reach (no ROAS in Ad Library)",
+  ].filter(Boolean);
+  document.getElementById("subtitle").textContent = bits.join(" · ");
+
+  fillPageFilter();
+
+  ["q", "minDays", "sort", "platform", "pageFilter"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+    document.getElementById(id).addEventListener("change", render);
+  });
+
+  document.querySelectorAll("#viewSeg button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.view = btn.dataset.view;
+      document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("active", b === btn));
+      render();
+    });
+  });
+  document.querySelectorAll("#mediaSeg button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.media = btn.dataset.media;
+      document.querySelectorAll("#mediaSeg button").forEach(b => b.classList.toggle("active", b === btn));
+      render();
+    });
+  });
+  document.getElementById("pinsOnly").addEventListener("click", () => {
+    state.pinsOnly = !state.pinsOnly;
+    render();
+  });
+  document.getElementById("clearPins").addEventListener("click", () => {
+    state.pins.clear();
+    savePins();
+    render();
+  });
+
+  window.addEventListener("keydown", (e) => {
+    const tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      if (e.key === "Escape") e.target.blur();
+      return;
+    }
+    if (e.key === "/" ) { e.preventDefault(); document.getElementById("q").focus(); }
+    if (e.key === "j") moveSelection(1);
+    if (e.key === "k") moveSelection(-1);
+    if (e.key === "p" && state.selectedId) {
+      if (state.pins.has(state.selectedId)) state.pins.delete(state.selectedId);
+      else state.pins.add(state.selectedId);
+      savePins();
+      render();
+    }
+    if (e.key === "o" && state.selectedId) {
+      const ad = DATA.ads.find(a => a.id === state.selectedId);
+      if (ad) window.open(libraryUrl(ad), "_blank", "noopener");
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

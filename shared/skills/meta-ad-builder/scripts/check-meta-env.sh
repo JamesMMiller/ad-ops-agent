@@ -30,7 +30,7 @@ else
   echo "No .env found — relying on already-exported environment variables."
 fi
 
-API_VERSION="${META_API_VERSION:-v23.0}"
+API_VERSION="${META_API_VERSION:-v25.0}"
 fail=0
 
 if [[ -z "${META_ACCESS_TOKEN:-}" ]]; then
@@ -47,11 +47,23 @@ else
   echo "  OK: META_AD_ACCOUNT_ID = ${META_AD_ACCOUNT_ID}"
 fi
 
+if [[ -z "${META_PIXEL_ID:-}" ]]; then
+  echo "  WARN: META_PIXEL_ID unset (needed for CAPI / purchase audit)"
+else
+  echo "  OK: META_PIXEL_ID = ${META_PIXEL_ID}"
+fi
+
+if [[ -n "${META_CAPI_ACCESS_TOKEN:-}" ]]; then
+  echo "  OK: META_CAPI_ACCESS_TOKEN is set (preferred for Conversions API)"
+else
+  echo "  INFO: META_CAPI_ACCESS_TOKEN unset — CAPI will use META_ACCESS_TOKEN"
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo
   echo "Add the missing keys to your .env (see .env.example). Required:"
   echo "  META_ACCESS_TOKEN=    META_AD_ACCOUNT_ID="
-  echo "Optional: META_PAGE_ID  META_IG_USER_ID  META_PIXEL_ID  META_API_VERSION"
+  echo "Optional: META_PAGE_ID  META_IG_USER_ID  META_PIXEL_ID  META_API_VERSION  META_CAPI_ACCESS_TOKEN"
   exit 1
 fi
 
