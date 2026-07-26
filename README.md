@@ -305,6 +305,12 @@ python3 shared/skills/blog-writing/scripts/hashnode_cli.py upsert-draft \
 
 Always upsert a **Hashnode draft** first; publish only with an explicit yes. Example chat: *"Write the next Hashnode build-diary post from this week's changelog."*
 
+### Step 12 — Store inbox (`hello@` + triage bot)
+
+Public contact should be **`hello@ourtechaccessories.com`**, not personal Gmail. Mail forwards into the store Gmail; an Apps Script LLM declines sales pitches and emails you only for genuine customers. You reply **From: hello@**.
+
+Full guide: [`shared/skills/store-inbox/SKILL.md`](shared/skills/store-inbox/SKILL.md).
+
 ---
 
 ## What's in the box
@@ -319,6 +325,7 @@ Always upsert a **Hashnode draft** first; publish only with an explicit yes. Exa
 | `shared/skills/pixar-style-ad/` · `claymation-ad/` · `caption-video/` | Multi-step creative pipelines |
 | `shared/skills/shopify-store/` | Shopify Admin API — products, pages, theme files |
 | `shared/skills/blog-writing/` | Journey blog voice + Hashnode draft/publish CLI |
+| `shared/skills/store-inbox/` | `hello@ourtechaccessories.com` + Gmail Apps Script triage |
 | `blog/` | Committed post source (`blog/posts/<date>-<slug>/`) |
 | `shared/skills/meta-ad-builder/` | Meta Marketing API publish (PAUSED) |
 | `MASTER_CONTEXT.template.md` | Template for workspace memory |

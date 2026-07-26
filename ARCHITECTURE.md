@@ -194,6 +194,7 @@ flowchart TD
 | Soft-stitch behaviour | `shared/skills/edit-video/` |
 | Shopify products / pages / theme | `shared/skills/shopify-store/` |
 | Journey blog / Hashnode publish | `shared/skills/blog-writing/` + `blog/posts/` |
+| Store hello@ + inbox triage bot | `shared/skills/store-inbox/` |
 | Cursor session behaviour | `.cursor/hooks/`, `.cursor/rules/` |
 | Agent blurb / identity | `AGENTS.tail.md`, README, this file |
 | First-run UX | `scripts/setup.sh` |
@@ -219,6 +220,7 @@ flowchart TD
 | `skills/kie-external-api/SKILL.md` + `reference.md` | KIE backend contract |
 | `shared/skills/shopify-store/SKILL.md` | Shopify storefront workflow |
 | `shared/skills/blog-writing/SKILL.md` | Journey blog + Hashnode publish |
+| `shared/skills/store-inbox/SKILL.md` | hello@ + Gmail LLM triage bot |
 | [blog/README.md](blog/README.md) | Blog purpose, voice, Hashnode checklist |
 | [shared/skills/image-ad-prompting/OVERVIEW.md](shared/skills/image-ad-prompting/OVERVIEW.md) | Image-ad decision tree |
 | [MASTER_CONTEXT.template.md](MASTER_CONTEXT.template.md) | Workspace memory shape |

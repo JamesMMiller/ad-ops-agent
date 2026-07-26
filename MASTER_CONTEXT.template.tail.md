@@ -78,5 +78,6 @@ Used by **`shopify-store`** (`shared/skills/shopify-store/`).
 - **Primary product handle(s):** _(fill locally; mark campaign URL locks)_
 - **Local projects:** `outputs/shopify/projects/<name>/` (gitignored)
 - **Main theme ID:** _(fill after `shopify_cli.py list-themes`)_
+- **Public contact:** `hello@ourtechaccessories.com` — see `shared/skills/store-inbox/`
 
 Credentials: `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` in `.env` only.
