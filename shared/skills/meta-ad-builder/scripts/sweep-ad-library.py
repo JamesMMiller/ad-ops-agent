@@ -76,53 +76,6 @@ DEFAULT_QUERIES = {
         "handheld car vacuum",
         "wireless car vacuum",
     ],
-    # Product-discovery categories (not yet core OTA SKUs)
-    "power_bank": [
-        "MagSafe power bank",
-        "magnetic wireless power bank",
-        "magnetic power bank iPhone",
-        "slim MagSafe battery pack",
-        "3 in 1 magnetic power bank",
-    ],
-    "tracker": [
-        "Apple Find My tracker",
-        "Bluetooth key tracker",
-        "AirTag alternative",
-        "wallet tracker Find My",
-        "luggage tracker Find My",
-    ],
-    "phone_stand": [
-        "MagSafe phone stand",
-        "folding MagSafe stand",
-        "magnetic phone grip stand",
-        "desktop MagSafe charger stand",
-    ],
-    "car_mount": [
-        "MagSafe car mount",
-        "magnetic phone car holder",
-        "MagSafe car charger mount",
-    ],
-    "usb_hub": [
-        "USB-C hub laptop",
-        "multiport USB-C hub",
-        "MagSafe SSD enclosure",
-        "portable USB-C dock",
-    ],
-    "laptop_stand": [
-        "portable laptop stand",
-        "foldable aluminium laptop stand",
-        "adjustable laptop riser",
-    ],
-    "phone_cooler": [
-        "phone cooler MagSafe",
-        "semiconductor phone cooler",
-        "magnetic phone cooling fan",
-    ],
-    "wireless_hdmi": [
-        "wireless HDMI transmitter",
-        "wireless HDMI dongle phone",
-        "USB-C wireless display adapter",
-    ],
 }
 
 NOISE_RE = re.compile(
@@ -216,9 +169,7 @@ def is_noise(ad):
         for k in (
             "fan", "charger", "massage", "fascia", "vacuum", "cooling", "magsafe",
             "wireless", "neck", "portable", "bladeless", "usb", "battery",
-            "gan", "retractable", "120w", "watt", "power bank", "tracker",
-            "airtag", "find my", "phone stand", "car mount", "hub", "dock",
-            "laptop stand", "phone cooler", "hdmi", "ssd",
+            "gan", "retractable", "120w", "watt",
         )
     )
     if not productish and NOISE_RE.search(blob):
