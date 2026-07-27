@@ -40,10 +40,12 @@ Answerable from store knowledge only (no order lookup):
 
 - Do you ship to Ireland / EU / US / internationally?
 - Is shipping UK only?
+- Is shipping free / is shipping included in the price?
 - Rough delivery times (general)
 - Contact / who is this store
 
-Default facts today: **UK shipping only**; international planned later with **no promised date**.
+Default facts today: **UK shipping only**; international planned later with **no promised date**.  
+Shipping cost: **some products free UK shipping**, others a fee at checkout — never claim always free or always charged.
 
 ## Escalate (CUSTOMER) — examples
 
