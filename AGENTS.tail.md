@@ -11,9 +11,10 @@
     - `nano-banana-image-ad` — photoreal / lifestyle creatives
     - `image-ad-clone` — reverse-engineer existing ads into reusable templates
   - `edit-video` — local ffmpeg soft-stitch / crossfade (no API).
-  - `shopify-store` — Shopify Admin API for products, pages, files, metafields, theme templates. Quality bar: `shared/skills/shopify-store/prompting/pdp-quality-bar.md`. Check: `bash shared/skills/shopify-store/scripts/check-shopify-env.sh`.
+  - `shopify-store` — Shopify Admin API for products, pages, files, metafields, theme templates (`tech-accessory`, **`bulk-pack`** volume/mix PDPs). Quality bar: `shared/skills/shopify-store/prompting/pdp-quality-bar.md`. Bulk packs: `shared/skills/shopify-store/prompting/bulk-pack.md`. Check: `bash shared/skills/shopify-store/scripts/check-shopify-env.sh`.
   - `blog-writing` — journey blog posts (James Miller / Our Tech Accessories) + Hashnode GraphQL draft-first publish. Source: `blog/posts/`. Check: `bash shared/skills/blog-writing/scripts/check-hashnode-env.sh`.
   - `store-inbox` — `hello@ourtechaccessories.com` (ImprovMX → store Gmail) + LLM triage Apps Script (decline pitches, escalate customers). Guide: `shared/skills/store-inbox/SKILL.md`.
+  - `google-apps-script` — generic Apps Script authoring (Gmail/Sheets, mailbox guard, Script Properties, triggers). Guide: `shared/skills/google-apps-script/SKILL.md`.
   - `meta-ad-builder` — publish creatives as PAUSED Meta ads (optional); Ad Library research via `sweep-ad-library.py` builds `browser.html` + Cursor canvas for browsing/citing competitor ads.
   - **Profit Admin** (`apps/profit-admin/`) — local P&L desk (Shopify + Meta + KIE log) with Refresh; embed-ready API for a later Shopify Admin app. Run: see `apps/profit-admin/README.md`.
 - **Reference images:** public URLs only for KIE — see *Image hosting* in `MASTER_CONTEXT.md`.
