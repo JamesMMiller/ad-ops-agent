@@ -11,6 +11,7 @@ Classifier labels (LLM returns exactly one):
 | `TRANSACTIONAL` | No bot action (Shopify, Google, banks, 2FA) |
 | `IGNORE` | Newsletter / bulk; archive, no reply |
 | `BOT` | Clear autoresponder/chatbot → `inbox-bot/dead`, archive, no reply |
+| `CLOSE` | Thanks / thread wrapping up → optional **deal follow-up** (once); see [deal-followup.md](deal-followup.md) |
 | *(dead)* | Label `inbox-bot/dead` — no further bot actions |
 
 Store knowledge: **[store-faq.md](store-faq.md)** (also Script property `STORE_FAQ`).
@@ -41,11 +42,17 @@ Answerable from store knowledge only (no order lookup):
 - Do you ship to Ireland / EU / US / internationally?
 - Is shipping UK only?
 - Is shipping free / is shipping included in the price?
+- Is this the right inbox / store email / store owner contact?
+- Is ourtechaccessories.com your official website?
+- Bare greetings / check-ins (“hi”, “are you there?”, “hello”)
 - Rough delivery times (general)
 - Contact / who is this store
 
 Default facts today: **UK shipping only**; international planned later with **no promised date**.  
-Shipping cost: **some products free UK shipping**, others a fee at checkout — never claim always free or always charged.
+Shipping cost: **some products free UK shipping**, others a fee at checkout — never claim always free or always charged.  
+Inbox confirm: yes, `hello@` is the official store customer email; do not share personal contact details. If that line is only a pitch opener, classify as **PITCH**.  
+Website confirm: yes, `ourtechaccessories.com` is the official site.  
+Generic greeting: FAQ with the fixed support-intro reply (not escalate).
 
 ## Escalate (CUSTOMER) — examples
 
@@ -60,8 +67,19 @@ Shipping cost: **some products free UK shipping**, others a fee at checkout — 
 The bot tracks a **per-thread watermark** (last handled message time), not “processed once forever”.
 
 - If the latest message is from us → wait (no action).
-- If the customer sends a new reply → re-classify that message (FAQ again, escalate, or IGNORE for a bare “thanks”).
+- If the customer sends a new reply → re-classify that message (FAQ again, escalate, CLOSE, or IGNORE).
 - Short follow-ups use prior thread context (“and to Germany?” after a shipping FAQ).
+- Closing thanks (`CLOSE`) may trigger a one-shot deal follow-up when enabled — [deal-followup.md](deal-followup.md).
+
+## Closed-thread deal follow-up
+
+Optional (`DEAL_FOLLOWUP_ENABLED=true`). Sends the GaN-style deal HTML **once** when:
+
+1. Customer closes the thread with thanks (and we already helped), or
+2. After a **pitch auto-decline** (decline first, then deal), or
+3. Idle sweep: we replied last on an FAQ/customer thread and they stayed quiet for N hours.
+
+Details: **[deal-followup.md](deal-followup.md)**.
 
 ## Never auto-decline if
 
