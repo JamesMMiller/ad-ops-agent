@@ -375,6 +375,20 @@ PRODUCT_METAFIELD_DEFINITIONS: list[dict[str, str]] = [
         "type": "multi_line_text_field",
         "description": "Optional fit, wear, or use guidance",
     },
+    {
+        "name": "Bulk pack enabled",
+        "namespace": "custom",
+        "key": "bulk_pack_enabled",
+        "type": "boolean",
+        "description": "Show mix-variant volume pack UI even without bulk-pack template suffix",
+    },
+    {
+        "name": "Bulk pack config",
+        "namespace": "custom",
+        "key": "bulk_pack",
+        "type": "json",
+        "description": "Volume pack overrides: tiers, unit labels, colour_css (see prompting/bulk-pack.md)",
+    },
 ]
 
 
@@ -451,9 +465,15 @@ def set_product_metafields(
         if key not in type_by_key:
             continue
         mf_type = type_by_key[key]
-        if mf_type.startswith("list.") and isinstance(value, list):
+        if mf_type == "boolean":
+            serialized = (
+                "true"
+                if value in (True, "true", "True", "1", 1)
+                else "false"
+            )
+        elif mf_type.startswith("list.") and isinstance(value, list):
             serialized = json.dumps(value, ensure_ascii=False)
-        elif isinstance(value, (dict, list)):
+        elif mf_type == "json" or isinstance(value, (dict, list)):
             serialized = json.dumps(value, ensure_ascii=False)
         else:
             serialized = str(value)

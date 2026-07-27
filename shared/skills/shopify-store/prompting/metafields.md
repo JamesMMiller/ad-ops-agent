@@ -16,6 +16,8 @@ Storefront access: **PUBLIC_READ** so Horizon / Online Store 2.0 can read them i
 | `colours` | `single_line_text_field` | Colours | Comma-separated live option values |
 | `whats_in_box` | `multi_line_text_field` | What's in the box | One item per line |
 | `fit_notes` | `multi_line_text_field` | Fit / use notes | Optional wear/use guidance |
+| `bulk_pack_enabled` | `boolean` | Bulk pack enabled | Show mix-variant pack UI without `bulk-pack` suffix (prefer suffix) |
+| `bulk_pack` | `json` | Bulk pack config | Tiers, unit labels, `colour_css` — see [bulk-pack.md](bulk-pack.md) |
 
 ## `project.json` shape
 
@@ -34,12 +36,19 @@ Storefront access: **PUBLIC_READ** so Horizon / Online Store 2.0 can read them i
     "power_supply": "USB (5V)",
     "colours": "Black, Pink, White",
     "whats_in_box": "Electric neck fan × 1\nPower cord × 1\nManual × 1\nPacking box × 1",
-    "fit_notes": "Adjustable arms; silicone mid-section for comfort and grip."
+    "fit_notes": "Adjustable arms; silicone mid-section for comfort and grip.",
+    "bulk_pack_enabled": true,
+    "bulk_pack": {
+      "unit": "charger",
+      "unit_plural": "chargers",
+      "eyebrow": "Buy more, save more",
+      "lead": "2: 15% off · 3: 20% off · 4+: 25% off"
+    }
   }
 }
 ```
 
-`list.single_line_text_field` values are sent as a JSON array string by the apply script.
+`list.single_line_text_field` values are sent as a JSON array string by the apply script. `boolean` → `"true"`/`"false"`; `json` → JSON-encoded object.
 
 ## Agent rules
 
