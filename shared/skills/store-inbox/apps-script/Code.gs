@@ -25,8 +25,11 @@ var LABEL_DEAD = 'inbox-bot/dead';
 var DEFAULT_STORE_FAQ =
   'Our Tech Accessories (UK Shopify store).\n' +
   'Contact: hello@ourtechaccessories.com\n' +
-  'Shipping: UK only for now. We do not ship internationally yet.\n' +
+  'Shipping destination: UK only for now. We do not ship internationally yet.\n' +
   'Future: We plan to offer international shipping later. No confirmed date. Do not promise a month.\n' +
+  'Shipping cost: Depends on the product. Some items include free UK shipping (shown on the product page and at checkout). ' +
+  'Others show a shipping fee at checkout. Never say shipping is always included or always extra. ' +
+  'Never invent a pound amount. Point customers to the product page / checkout for the exact cost for their basket.\n' +
   'Delivery: Usually a few working days after dispatch within the UK; depends on product/carrier. Some PDPs say 3-7 working days for UK stock.\n' +
   'Never invent order status, tracking numbers, refunds, or returns decisions. Those need a human.\n' +
   'Tone: short UK English, calm, human. No em dashes. No corporate or chatbot filler.';
