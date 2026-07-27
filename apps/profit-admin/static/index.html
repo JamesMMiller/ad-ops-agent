@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Our Tech — Profit Admin</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div>
+          <h1>Profit Admin</h1>
+          <p class="muted" id="subtitle">Our Tech Accessories · local ops desk</p>
+        </div>
+        <div class="header-actions">
+          <span class="muted" id="last-refreshed">Not refreshed yet</span>
+          <button type="button" id="btn-refresh" class="btn primary">Refresh</button>
+        </div>
+      </header>
+
+      <div id="warnings" class="warnings" hidden></div>
+
+      <section class="stats" id="stats">
+        <div class="stat"><div class="stat-value" id="stat-rev">—</div><div class="stat-label">Revenue</div></div>
+        <div class="stat"><div class="stat-value" id="stat-ads">—</div><div class="stat-label">Meta spend</div></div>
+        <div class="stat"><div class="stat-value" id="stat-mer">—</div><div class="stat-label">Trailing 3-day MER</div></div>
+        <div class="stat"><div class="stat-value" id="stat-pnl">—</div><div class="stat-label">Cumulative P&amp;L</div></div>
+      </section>
+
+      <section class="toolbar">
+        <label>
+          Chart
+          <select id="chart-view">
+            <option value="cumPnl">Cumulative P&amp;L</option>
+            <option value="cumRevCost">Revenue vs costs</option>
+            <option value="dailyStack">Daily cost stack</option>
+            <option value="mer">3-day MER</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2 id="chart-title">Cumulative estimated P&amp;L</h2>
+        <canvas id="main-chart" height="110"></canvas>
+        <p class="muted footnote" id="chart-note"></p>
+      </section>
+
+      <section class="card">
+        <h2>Daily breakdown</h2>
+        <div class="table-wrap">
+          <table id="daily-table">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Revenue</th>
+                <th>Ads</th>
+                <th>COGS</th>
+                <th>KIE</th>
+                <th>Day P&amp;L</th>
+                <th>Cum P&amp;L</th>
+                <th>3d MER</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Unit economics (ACTIVE SKUs)</h2>
+        <div class="table-wrap">
+          <table id="unit-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Sell</th>
+                <th>Landed</th>
+                <th>Contrib</th>
+                <th>Margin</th>
+                <th>Min ROAS</th>
+                <th>Max CPA</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="footer muted">
+        Costs: Shopify unitCost · Meta Insights · KIE log credits × KIE_USD_PER_CREDIT × USDGBP ·
+        Shopify Basic amortised. Secrets stay on the server. Phase 2: embed in Shopify Admin via App Bridge.
+      </footer>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
