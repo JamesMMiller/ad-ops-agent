@@ -76,6 +76,68 @@ DEFAULT_QUERIES = {
         "handheld car vacuum",
         "wireless car vacuum",
     ],
+    # Everyday “next-gen tech” accessories (not charging-only) — 2026-07-27
+    "find_my_tracker": [
+        "Find My tracker",
+        "AirTag alternative",
+        "Bluetooth item finder",
+        "Apple Find My tag",
+        "smart luggage tracker",
+    ],
+    "phone_cooler": [
+        "phone cooler",
+        "magnetic phone cooler",
+        "phone semiconductor cooler",
+        "gaming phone radiator",
+        "TEC phone cooler",
+    ],
+    "portable_ssd": [
+        "portable SSD",
+        "external NVMe SSD",
+        "USB-C portable SSD",
+        "pocket SSD",
+    ],
+    "mini_projector": [
+        "mini projector",
+        "portable projector",
+        "pocket projector Android",
+        "pico projector",
+    ],
+    "bone_conduction": [
+        "bone conduction headphones",
+        "open ear headphones",
+        "bone conduction earbuds",
+        "open ear sport headphones",
+    ],
+    "translation_earbuds": [
+        "translation earbuds",
+        "AI translation earbuds",
+        "real time translator earbuds",
+        "language translator earbuds",
+    ],
+    "uv_sanitizer": [
+        "UV phone sanitizer",
+        "UV sterilizer box",
+        "UV-C sanitizer phone",
+        "phone UV cleaner",
+    ],
+    "qi2_charger": [
+        "Qi2 charger",
+        "Qi2 magnetic charger",
+        "Qi2 wireless charger",
+        "MagSafe Qi2",
+    ],
+    "portable_monitor": [
+        "portable monitor",
+        "USB-C portable monitor",
+        "15.6 portable screen",
+        "laptop portable display",
+    ],
+    "smart_ring": [
+        "smart ring fitness",
+        "smart ring sleep tracker",
+        "health smart ring",
+    ],
 }
 
 NOISE_RE = re.compile(
