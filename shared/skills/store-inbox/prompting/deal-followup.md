@@ -25,6 +25,8 @@ Canonical templates (edit these, then regenerate `DealFollowupBodies.gs` or uplo
 - [`../apps-script/templates/deal-followup.html`](../apps-script/templates/deal-followup.html)
 - [`../apps-script/templates/deal-followup.txt`](../apps-script/templates/deal-followup.txt)
 
+**Logo:** dark banner uses CDN **`our-tech-logo-inverted`** (canonical file: `outputs/shopify/projects/branding/our-tech-logo-inverted.png`). Light surfaces use **`our-tech-logo-default`**. See `outputs/shopify/projects/branding/DIRECTIONS.md`. Do not replace with an HTML “OT” lockup.
+
 Tokens: `{{NAME}}`, `{{NAME_SUFFIX}}` (`" Joseph"` or empty), `{{INTRO}}`, `{{BRIDGE}}`.
 
 `Code.gs` fills `{{INTRO}}` from the trigger:
