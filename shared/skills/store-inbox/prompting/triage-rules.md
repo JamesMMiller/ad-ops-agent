@@ -7,7 +7,7 @@ Classifier labels (LLM returns exactly one):
 | `PITCH` | Auto-decline from hello@; label `inbox-bot/pitch`; archive |
 | `FAQ` | Auto-reply from store knowledge; label `inbox-bot/faq` |
 | `DEAL` | Discount / best / last price / coupon ask → reply with the **volume deal** (HTML when enabled); do not escalate |
-| `CUSTOMER` | Escalate to personal; label `inbox-bot/customer`. Owner asks: reply asking what it concerns, then escalate |
+| `CUSTOMER` | Escalate to personal; label `inbox-bot/customer`. Owner asks: ask what it concerns first (`inbox-bot/owner-ask`); escalate on their clarifying reply |
 | `UNCLEAR` | Escalate (same as customer); label `inbox-bot/unclear` |
 | `TRANSACTIONAL` | No bot action (Shopify, Google, banks, 2FA) |
 | `IGNORE` | Clear newsletter / bulk only; archive, no reply. Prefer `PITCH` (decline+deal) or `UNCLEAR` when a person wrote |
@@ -56,19 +56,17 @@ Answerable from store knowledge only (no order lookup):
 
 ## Speak to the owner
 
-Route by intent — never treat as inbox-confirm FAQ:
-
 | Intent | Action |
 |--------|--------|
-| **Pitch** (SEO / agency / partnership / marketing, or owner-ask after a pitch) | `PITCH` → decline + deal follow-up (one outbound) |
-| **Customer / order** (order, refund, shipping help, product, or ongoing FAQ/customer thread) | Escalate to personal. If they only say “connect me to the owner” with no topic, ask what it concerns first, then escalate |
-| **Unclear** | Ask what it concerns + escalate |
+| **Pitch** (SEO / agency / partnership, or owner-ask after a pitch) | `PITCH` → decline + deal follow-up |
+| **Anything else** (including customer/order, or bare “connect me to the owner”) | Ask what it concerns first. **Do not escalate yet.** Label `inbox-bot/owner-ask` |
+| **Their next reply** (after we asked) | Escalate if customer/order/unclear; FAQ if a clear store question; pitch → decline+deal |
 
 Examples:
 - “Can I speak with the store owner about a partnership / SEO?” → pitch decline + deal
-- “Connect me to the owner — order #1002 not arrived” → escalate
-- “Can I speak with the store owner?” on a shipping FAQ thread → ask what it concerns + escalate
-- Bare “Connect me to the store owner?” → ask what it concerns + escalate
+- “Can I speak with the store owner?” → ask what it concerns (no escalate yet)
+- “Connect me to the owner — order #1002 not arrived” → still ask what it concerns first if the message is mainly an owner ask; once they clarify (or if follow-up states the order), escalate
+- After bot asks: “It’s about my missing order” → escalate
 
 ## DEAL (discount / price) — examples
 
@@ -95,7 +93,7 @@ Generic greeting: FAQ with the fixed support-intro reply (not escalate) — only
 - Anything needing an order number lookup
 - Ask to speak with the store owner / manager:
   - Pitch → decline + deal follow-up
-  - Customer / order → escalate (ask what it concerns when the topic is bare)
+  - Otherwise → ask what it concerns first (no escalate yet); escalate after they clarify
 - Wholesale only if they sound like a real buyer (when unsure → UNCLEAR → escalate)
 
 ## Follow-ups (same thread)

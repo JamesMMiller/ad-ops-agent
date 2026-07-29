@@ -34,6 +34,7 @@ var LABEL_DEAD = 'inbox-bot/dead';
 var LABEL_DEAL = 'inbox-bot/deal-followup';
 var LABEL_CLOSE = 'inbox-bot/closed';
 var LABEL_RESCUED = 'inbox-bot/rescued-from-spam';
+var LABEL_OWNER_ASK = 'inbox-bot/owner-ask';
 
 /** Reset each triageRecent / dealFollowUpSweep invocation. */
 var EMAILS_SENT_THIS_RUN_ = 0;
@@ -47,7 +48,7 @@ var DEFAULT_STORE_FAQ =
   'Do not role-play as a named owner.\n' +
   'If they ask to speak with / talk to / connect to the store owner or manager: ' +
   'pitch/SEO/agency/partnership → decline with deal follow-up; ' +
-  'customer or order related → escalate (ask what it concerns if they give no topic). ' +
+  'otherwise ask what it concerns first and do NOT escalate yet; escalate after they clarify if customer/order related. ' +
   'Do NOT claim you are the owner. Do NOT reply with only the generic support intro.\n' +
   'Generic greetings / check-ins with no real question (hi, hello, are you there, anyone there): ' +
   'reply with the short customer-support intro. Confirm this is the store support email and ask them to reply with product or order details (order number if they have one). ' +
@@ -455,7 +456,7 @@ function triageThreadLocked_(thread) {
     label = 'DEAL';
   }
 
-  // "Speak to the owner" — route by intent (never treat as inbox-confirm FAQ).
+  // "Speak to the owner" — pitch → decline+deal; otherwise ask what it concerns first (never escalate yet).
   if (
     isOwnerEscalationAsk_(subject, body) &&
     label !== 'BOT' &&
@@ -464,15 +465,28 @@ function triageThreadLocked_(thread) {
   ) {
     if (label === 'PITCH' || looksLikePitch_(subject, body, context)) {
       label = 'PITCH';
-    } else if (
-      hasOrderSupportSignals_(subject, body) ||
-      isCustomerRelatedOwnerContext_(thread, subject, body, context)
-    ) {
-      // Customer / order: escalate. Bare "connect me to owner" still asks what it concerns.
-      label = ownerAskIsBare_(subject, body) ? 'OWNER_ASK' : 'CUSTOMER';
-    } else if (label !== 'PITCH') {
-      // Unknown topic → ask what it concerns + escalate (safer than silent decline).
+    } else {
       label = 'OWNER_ASK';
+    }
+  }
+
+  // After we asked "what is this concerning?", their next reply → escalate (unless pitch/FAQ/deal/close).
+  if (
+    hasLabel_(thread, LABEL_OWNER_ASK) &&
+    !isOwnerEscalationAsk_(subject, body) &&
+    label !== 'BOT' &&
+    label !== 'TRANSACTIONAL' &&
+    label !== 'PITCH' &&
+    label !== 'DEAL' &&
+    label !== 'CLOSE' &&
+    !(label === 'IGNORE' && isClosingThanks_(subject, body))
+  ) {
+    if (looksLikePitch_(subject, body, context)) {
+      label = 'PITCH';
+    } else if (label === 'FAQ' && (isShippingFaqAsk_(subject, body) || isInboxConfirmQuestion_(subject, body) || isOfficialWebsiteQuestion_(subject, body) || isGenericGreeting_(subject, body))) {
+      // Allow a clear FAQ answer without escalating
+    } else if (label === 'FAQ' || label === 'CUSTOMER' || label === 'UNCLEAR' || label === 'IGNORE') {
+      label = 'CUSTOMER';
     }
   }
 
@@ -486,9 +500,8 @@ function triageThreadLocked_(thread) {
 
   // Claim this inbound before any send so a second run cannot reply again.
   // If quota blocks the send, clear the claim and leave watermark unset so we retry later.
-  var emailsNeeded = label === 'OWNER_ASK' ? 2 : 1;
   if (!dry) {
-    if (!canSendEmail_(emailsNeeded)) {
+    if (!canSendEmail_(1)) {
       Logger.log('Deferring thread ' + thread.getId() + ' — email quota low');
       return;
     }
@@ -518,15 +531,9 @@ function triageThreadLocked_(thread) {
       thread.addLabel(getLabel_(LABEL_FAQ));
       if (!dry) handleDiscountAsk_(thread, msg, true);
     } else if (label === 'OWNER_ASK') {
-      thread.addLabel(getLabel_(LABEL_CUSTOMER));
-      if (!dry) {
-        sendOwnerAskReply_(thread, msg);
-        escalate_(thread, msg, {
-          label: 'CUSTOMER',
-          reason: 'asked for store owner; bot asked what it concerns',
-          confidence: 0.85
-        });
-      }
+      // Clarify first — do not escalate until they say what it is about.
+      thread.addLabel(getLabel_(LABEL_OWNER_ASK));
+      if (!dry) sendOwnerAskReply_(thread, msg);
     } else if (label === 'FAQ') {
       thread.addLabel(getLabel_(LABEL_FAQ));
       if (!dry) {
@@ -537,9 +544,14 @@ function triageThreadLocked_(thread) {
     } else if (label === 'TRANSACTIONAL') {
       // leave in inbox
     } else {
-      // CUSTOMER or UNCLEAR
+      // CUSTOMER or UNCLEAR (including clarification after owner-ask)
       thread.addLabel(getLabel_(label === 'CUSTOMER' ? LABEL_CUSTOMER : LABEL_UNCLEAR));
-      if (!dry) escalate_(thread, msg, result);
+      if (!dry) {
+        if (hasLabel_(thread, LABEL_OWNER_ASK) && !result.reason) {
+          result.reason = 'clarified after owner-ask';
+        }
+        escalate_(thread, msg, result);
+      }
     }
   } catch (e) {
     if (String(e).indexOf('EmailQuota') !== -1) {
@@ -686,8 +698,8 @@ function geminiClassify_(apiKey, from, subject, body, context) {
     'If the message ONLY asks whether ourtechaccessories.com is the official website, choose FAQ and confirm yes.\n' +
     'If they ask to speak with / talk to / connect to the store owner or manager:\n' +
     '- If it is (or follows) a sales/SEO/agency/partnership pitch → choose PITCH (decline + deal).\n' +
-    '- If it is customer/order related (order, shipping help, product, refund, or an ongoing support thread) → choose CUSTOMER (escalate).\n' +
-    '- If unclear what they want the owner for → choose CUSTOMER (escalate; we will ask what it concerns).\n' +
+    '- Otherwise choose CUSTOMER only when they already stated a customer/order topic in the same message; ' +
+    'if they only ask for the owner with no topic, still choose CUSTOMER (we ask what it concerns first and escalate on their next reply).\n' +
     'Do NOT treat "speak to the owner" as FAQ inbox-confirm.\n' +
     'If "right inbox / official website" is just an opener before SEO, partnership, agency, or marketing pitch, choose PITCH.\n' +
     'CUSTOMER = order number, tracking, refund, return, damaged item, wrong colour, payment problem, ' +
@@ -1574,7 +1586,8 @@ function ensureLabels_() {
     LABEL_DEAD,
     LABEL_DEAL,
     LABEL_CLOSE,
-    LABEL_RESCUED
+    LABEL_RESCUED,
+    LABEL_OWNER_ASK
   ].forEach(function (name) {
     getLabel_(name);
   });
