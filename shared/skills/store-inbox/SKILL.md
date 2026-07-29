@@ -39,6 +39,7 @@ Sender
         ├─ PITCH / AGENCY_SPAM → one reply (deal with pitch intro when enabled, else plain decline), label, archive
         ├─ FAQ (shipping countries, general delivery) → auto-reply from STORE_FAQ
         ├─ DEAL (discount / last price / coupon) → reply with volume deal HTML (once); else text tiers
+        ├─ OWNER ASK (speak to owner/manager) → ask what it concerns + escalate to personal
         ├─ CUSTOMER / ORDER / UNCLEAR → forward to personal + label Escalate
         ├─ CLOSE (thanks / wrapped up) → optional one-shot deal follow-up
         ├─ idle FAQ/customer (us last, quiet N hours) → optional deal follow-up; also retries pitch declines missing deal label
@@ -76,7 +77,7 @@ Docs: **[prompting/deal-followup.md](prompting/deal-followup.md)**. Cross-skill:
 3. Set Script Properties: `ESCALATE_TO`, `GEMINI_API_KEY`, `HELLO_FROM`; optional `STORE_FAQ`; optional `DEAL_BODIES_URL` (defaults to `/pages/inbox-deal`).
 4. Update Shopify **Customer email** / contact + privacy policy text to `hello@ourtechaccessories.com` (Admin or `shopify-store` skill; legal policies may need Admin UI if scope missing).
 5. After editing deal templates: rebuild liquid → upsert `templates/page.inbox-deal.liquid` on MAIN → run Apps Script `refreshDealBodiesCache`.
-6. Test: pitch (deal or decline), “Do you ship to France?” (FAQ), “Any discount / last price?” (DEAL), “Where is my order?” (escalate).
+6. Test: pitch (deal or decline), “Do you ship to France?” (FAQ UK-only), “Hi there, international shipping?” (FAQ not greeting), “Speak to the owner?” (ask what it concerns + escalate), “Any discount / last price?” (DEAL), “Where is my order?” (escalate).
 7. Log the decision in local `MASTER_CONTEXT.md` Changelog.
 
 ## Env (optional local notes)

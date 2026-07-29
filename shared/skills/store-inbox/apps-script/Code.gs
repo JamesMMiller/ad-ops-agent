@@ -42,11 +42,15 @@ var EMAILS_SENT_THIS_RUN_ = 0;
 var DEFAULT_STORE_FAQ =
   'Our Tech Accessories (UK Shopify store).\n' +
   'Contact: hello@ourtechaccessories.com is the official customer inbox for Our Tech Accessories (ourtechaccessories.com).\n' +
-  'If asked "is this the right inbox / store email / store owner contact": confirm this is the store\'s customer email. ' +
+  'If asked "is this the right inbox / store email / correct contact": confirm this is the store\'s customer email. ' +
   'Do not share personal name, personal email, phone, or home address. ' +
-  'Do not role-play as a named owner; offer to help with orders or product questions.\n' +
+  'Do not role-play as a named owner.\n' +
+  'If they ask to speak with / talk to / connect to the store owner or manager (and it is not a sales pitch): ' +
+  'ask what their request is about (order, product, shipping, something else). Do NOT claim you are the owner. ' +
+  'Do NOT reply with only the generic support intro.\n' +
   'Generic greetings / check-ins with no real question (hi, hello, are you there, anyone there): ' +
-  'reply with the short customer-support intro. Confirm this is the store support email and ask them to reply with product or order details (order number if they have one).\n' +
+  'reply with the short customer-support intro. Confirm this is the store support email and ask them to reply with product or order details (order number if they have one). ' +
+  'A message that starts with "Hi there" but then asks a real question (e.g. shipping) is NOT a bare greeting — answer the question.\n' +
   'Official website: https://ourtechaccessories.com (with or without www). ' +
   'If asked "is this your official website?" and they mention ourtechaccessories.com, confirm yes. ' +
   'Do not invent other domains. If they name a different domain, say you only operate ourtechaccessories.com ' +
@@ -444,9 +448,21 @@ function triageThreadLocked_(thread) {
     label !== 'PITCH' &&
     label !== 'BOT' &&
     label !== 'TRANSACTIONAL' &&
-    !hasOrderSupportSignals_(subject, body)
+    !hasOrderSupportSignals_(subject, body) &&
+    !isOwnerEscalationAsk_(subject, body)
   ) {
     label = 'DEAL';
+  }
+
+  // "Speak to the owner" → ask what it concerns + escalate (not inbox-confirm FAQ).
+  if (
+    isOwnerEscalationAsk_(subject, body) &&
+    label !== 'PITCH' &&
+    label !== 'BOT' &&
+    label !== 'TRANSACTIONAL' &&
+    label !== 'DEAL'
+  ) {
+    label = 'OWNER_ASK';
   }
 
   if (label === 'BOT') {
@@ -459,8 +475,9 @@ function triageThreadLocked_(thread) {
 
   // Claim this inbound before any send so a second run cannot reply again.
   // If quota blocks the send, clear the claim and leave watermark unset so we retry later.
+  var emailsNeeded = label === 'OWNER_ASK' ? 2 : 1;
   if (!dry) {
-    if (!canSendEmail_(1)) {
+    if (!canSendEmail_(emailsNeeded)) {
       Logger.log('Deferring thread ' + thread.getId() + ' — email quota low');
       return;
     }
@@ -489,6 +506,16 @@ function triageThreadLocked_(thread) {
     } else if (label === 'DEAL') {
       thread.addLabel(getLabel_(LABEL_FAQ));
       if (!dry) handleDiscountAsk_(thread, msg, true);
+    } else if (label === 'OWNER_ASK') {
+      thread.addLabel(getLabel_(LABEL_CUSTOMER));
+      if (!dry) {
+        sendOwnerAskReply_(thread, msg);
+        escalate_(thread, msg, {
+          label: 'CUSTOMER',
+          reason: 'asked for store owner; bot asked what it concerns',
+          confidence: 0.85
+        });
+      }
     } else if (label === 'FAQ') {
       thread.addLabel(getLabel_(LABEL_FAQ));
       if (!dry) {
@@ -635,17 +662,22 @@ function geminiClassify_(apiKey, from, subject, body, context) {
     '\n---END---\n' +
     'Examples of FAQ: do you ship to my country, international shipping, UK only, delivery times, ' +
     'free shipping / shipping fee, is this the right inbox, is this the store email, ' +
-    'am I emailing the store / store owner contact, is this your official website, ' +
+    'am I emailing the correct store contact, is this your official website, ' +
     'ourtechaccessories.com official site, who are you / contact email.\n' +
     'Examples of DEAL: "is this your last price?", "any discount?", "can you do better on price?", ' +
     '"got a coupon?", "any promo on the charger?", "best price?"\n' +
     'If the message is ONLY a greeting or check-in with no real question ' +
     '(hi, hello, hey, are you there, anyone there, just checking), choose FAQ. ' +
     'Reply with the customer-support intro (this is store support; ask for product/order details).\n' +
+    'IMPORTANT: "Hi there, …" followed by a real question (shipping, product, price) is NOT a bare greeting — ' +
+    'classify as FAQ/DEAL/CUSTOMER for that question and answer it.\n' +
     'If the message ONLY asks whether this is the right store inbox/contact, choose FAQ and confirm hello@ is the store customer email.\n' +
     'If the message ONLY asks whether ourtechaccessories.com is the official website, choose FAQ and confirm yes.\n' +
-    'If "right inbox / store owner / official website" is just an opener before SEO, partnership, agency, or marketing pitch, choose PITCH.\n' +
-    'CUSTOMER = order number, tracking, refund, return, damaged item, wrong colour, payment problem, or anything needing account/order data.\n' +
+    'If they ask to speak with / talk to / connect to the store owner or manager (and it is not a pitch), ' +
+    'choose CUSTOMER. Do NOT treat that as FAQ inbox-confirm.\n' +
+    'If "right inbox / official website" is just an opener before SEO, partnership, agency, or marketing pitch, choose PITCH.\n' +
+    'CUSTOMER = order number, tracking, refund, return, damaged item, wrong colour, payment problem, ' +
+    'ask to speak to the owner/manager, or anything needing account/order data.\n' +
     'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate. Do NOT use UNCLEAR for a bare greeting or a clear discount ask.\n' +
     'TRANSACTIONAL = receipts, Shopify, Google, banks, 2FA.\n' +
     'CLOSE = thread wrapping up: short thanks / cheers / all good / that helps / perfect / sorted, ' +
@@ -708,20 +740,26 @@ function heuristicClassify_(from, subject, body) {
     return { label: 'PITCH', reason: 'pitch keywords x' + hits, confidence: 0.65 };
   }
 
+  if (isOwnerEscalationAsk_(subject, body)) {
+    return { label: 'CUSTOMER', reason: 'asked for store owner/manager', confidence: 0.8 };
+  }
+
+  if (isShippingFaqAsk_(subject, body)) {
+    return { label: 'FAQ', reason: 'shipping destination/cost ask', confidence: 0.8 };
+  }
+
   if (isGenericGreeting_(subject, body)) {
     return { label: 'FAQ', reason: 'generic greeting/check-in', confidence: 0.75 };
   }
 
   var faqHints = [
-    'ship to', 'shipping to', 'do you ship', 'international', 'deliver to',
-    'outside the uk', 'outside uk', 'europe', 'eu shipping', 'worldwide',
-    'only uk', 'uk only', 'how long does delivery', 'delivery time', 'postage',
-    'free shipping', 'shipping fee', 'shipping included',
     'right inbox', 'correct inbox', 'right email', 'correct email',
-    'store owner', 'store\'s email', 'stores email', 'official email',
+    'store\'s email', 'stores email', 'official email',
     'is this the store', 'emailing the store', 'right contact',
     'official website', 'official site', 'official web',
-    'ourtechaccessories.com', 'is this your website', 'your website'
+    'ourtechaccessories.com', 'is this your website', 'your website',
+    'how long does delivery', 'delivery time', 'postage',
+    'free shipping', 'shipping fee', 'shipping included'
   ];
   for (var f = 0; f < faqHints.length; f++) {
     if (blob.indexOf(faqHints[f]) !== -1) {
@@ -865,9 +903,21 @@ function sendFaqReply_(thread, msg, from, subject, body, context) {
 }
 
 function draftFaqReply_(from, subject, body, context) {
-  // Fixed copy for bare greetings (don't let the model improvise)
+  // Fixed copy for bare greetings only (don't let the model improvise)
   if (isGenericGreeting_(subject, body)) {
     return defaultSupportIntroReply_();
+  }
+  // Deterministic shipping answer if Gemini is down / fails
+  if (isShippingFaqAsk_(subject, body)) {
+    var keyShip = props_().getProperty('GEMINI_API_KEY');
+    if (keyShip) {
+      try {
+        return geminiFaqReply_(keyShip, storeFaq_(), from, subject, body, context || '');
+      } catch (eShip) {
+        Logger.log('Shipping FAQ draft failed, template fallback: ' + eShip);
+      }
+    }
+    return defaultShippingReply_();
   }
   var key = props_().getProperty('GEMINI_API_KEY');
   var faq = storeFaq_();
@@ -884,6 +934,9 @@ function draftFaqReply_(from, subject, body, context) {
   if (isOfficialWebsiteQuestion_(subject, body)) {
     return defaultOfficialWebsiteReply_();
   }
+  if (isShippingFaqAsk_(subject, body)) {
+    return defaultShippingReply_();
+  }
   return defaultSupportIntroReply_();
 }
 
@@ -891,6 +944,8 @@ function geminiFaqReply_(apiKey, faq, from, subject, body, context) {
   var prompt =
     'Write a short customer-support reply for Our Tech Accessories.\n' +
     'Use ONLY facts from STORE KNOWLEDGE. If the question needs order/tracking/refund data, reply asking them to reply with their order number and say a human will help.\n' +
+    'If they ask about international / outside-UK shipping: say we ship UK only for now, international is planned later with no date. Answer that first — do not send only a generic support intro.\n' +
+    'If they ask to speak with the store owner: ask what their request is about. Do not claim you are the owner. Do not send only the generic support intro.\n' +
     'Style rules (strict):\n' +
     '- UK English. Plain text only. Max ~120 words. No subject line.\n' +
     '- Sound like a real small-shop person, not a chatbot or marketing email.\n' +
@@ -937,13 +992,87 @@ function defaultSupportIntroReply_() {
   );
 }
 
+function defaultShippingReply_() {
+  var hello = helloFrom_();
+  return (
+    'Hi,\n\n' +
+    'We currently ship within the UK only, so we are not offering international delivery yet.\n\n' +
+    'We do plan to expand shipping later, but we do not have a confirmed date. ' +
+    'Worth checking the site again in future, or email us if you have a UK delivery question.\n\n' +
+    'Our Tech Accessories\n' +
+    hello +
+    '\n'
+  );
+}
+
+function sendOwnerAskReply_(thread, msg) {
+  var hello = helloFrom_();
+  var body = sanitizeCustomerReply_(defaultOwnerAskReply_());
+  safeThreadReply_(thread, body, { from: hello });
+}
+
+function defaultOwnerAskReply_() {
+  var hello = helloFrom_();
+  return (
+    'Hi,\n\n' +
+    'Happy to help. Could you tell me what you need the owner for ' +
+    '(an order, a product question, shipping, or something else)? ' +
+    'Reply with a short note and we will take it from there.\n\n' +
+    'Our Tech Accessories\n' +
+    hello +
+    '\n'
+  );
+}
+
+/**
+ * True only for bare hellos / check-ins with no real question.
+ * "Hi there, do you ship internationally?" must return false.
+ */
 function isGenericGreeting_(subject, body) {
+  if (isShippingFaqAsk_(subject, body)) return false;
+  if (isOwnerEscalationAsk_(subject, body)) return false;
+  if (isDiscountAsk_(subject, body)) return false;
+  if (hasOrderSupportSignals_(subject, body)) return false;
+  if (isInboxConfirmQuestion_(subject, body)) return false;
+  if (isOfficialWebsiteQuestion_(subject, body)) return false;
+
   var raw = String(body || '');
   // Drop common mobile mail footers so short check-ins still match
   raw = raw.replace(/sent from .*$/gim, '');
   raw = raw.replace(/get outlook for .*$/gim, '');
   var text = (String(subject || '') + ' ' + raw).toLowerCase();
   text = text.replace(/\s+/g, ' ').trim();
+
+  // Strip quoted history / signatures that can inflate length
+  text = text.replace(/\bon \d{1,2}.*wrote:.*$/i, '');
+  text = text.split('-----original message-----')[0];
+
+  var compact = text
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^a-z0-9\s?']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  var words = compact.split(' ').filter(function (w) {
+    return w.length;
+  });
+
+  // Substantive asks are never "just a greeting"
+  if (words.length > 12) return false;
+  if (
+    compact.indexOf('wondering') !== -1 ||
+    compact.indexOf('question') !== -1 ||
+    compact.indexOf('shipping') !== -1 ||
+    compact.indexOf('deliver') !== -1 ||
+    compact.indexOf('order') !== -1 ||
+    compact.indexOf('product') !== -1 ||
+    compact.indexOf('refund') !== -1 ||
+    compact.indexOf('speak with') !== -1 ||
+    compact.indexOf('speak to') !== -1 ||
+    compact.indexOf('connect me') !== -1 ||
+    compact.indexOf('store owner') !== -1
+  ) {
+    return false;
+  }
 
   var greetHints = [
     'are you there',
@@ -958,17 +1087,24 @@ function isGenericGreeting_(subject, body) {
     'good evening'
   ];
   for (var i = 0; i < greetHints.length; i++) {
-    if (text.indexOf(greetHints[i]) !== -1) return true;
+    if (compact.indexOf(greetHints[i]) !== -1) {
+      // Only if little remains after removing the greeting phrase
+      var rest = compact.replace(greetHints[i], ' ').replace(/\s+/g, ' ').trim();
+      rest = rest
+        .replace(/\bour tech accessories\b/g, '')
+        .replace(/\bhi\b/g, '')
+        .replace(/\bhello\b/g, '')
+        .replace(/\bhey\b/g, '')
+        .replace(/\bthanks?\b/g, '')
+        .replace(/\bplease\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!rest || rest.length <= 8) return true;
+      return false;
+    }
   }
 
   // Very short hello/hi/hey with little else
-  var compact = text
-    .replace(/[^a-z0-9\s?]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  var words = compact.split(' ').filter(function (w) {
-    return w.length;
-  });
   if (words.length <= 6) {
     var first = words[0] || '';
     if (
@@ -985,20 +1121,103 @@ function isGenericGreeting_(subject, body) {
   return false;
 }
 
+/** Ask to speak with / connect to the store owner or manager (not "is this the owner contact?"). */
+function isOwnerEscalationAsk_(subject, body) {
+  var blob = ((subject || '') + ' ' + (body || '')).toLowerCase().replace(/\s+/g, ' ');
+  if (!blob) return false;
+  // Inbox-confirm style ("is this the store owner contact?") is FAQ, not escalation.
+  if (
+    (blob.indexOf('right inbox') !== -1 ||
+      blob.indexOf('correct inbox') !== -1 ||
+      blob.indexOf('right email') !== -1 ||
+      blob.indexOf('correct email') !== -1 ||
+      blob.indexOf('right contact') !== -1) &&
+    blob.indexOf('speak') === -1 &&
+    blob.indexOf('talk') === -1 &&
+    blob.indexOf('connect') === -1
+  ) {
+    return false;
+  }
+  if (/\b(speak|talk|chat)\s+(to|with)\s+(the\s+)?(store\s+)?(owner|manager)\b/.test(blob)) {
+    return true;
+  }
+  if (/\bconnect\s+me\s+(to|with)\s+(the\s+)?(store\s+)?(owner|manager)\b/.test(blob)) {
+    return true;
+  }
+  if (/\b(put|pass)\s+me\s+(through\s+)?(to\s+)?(the\s+)?(store\s+)?(owner|manager)\b/.test(blob)) {
+    return true;
+  }
+  if (/\bcan i (speak|talk) (to|with)\b/.test(blob) && /\b(owner|manager)\b/.test(blob)) {
+    return true;
+  }
+  if (/\bstore owner\??\s*$/.test(blob.trim()) || blob.trim() === 'store owner?') {
+    return true;
+  }
+  if (blob.indexOf('connect me to the store owner') !== -1) return true;
+  return false;
+}
+
+/** International / destination / UK-only shipping questions. */
+function isShippingFaqAsk_(subject, body) {
+  var blob = ((subject || '') + ' ' + (body || '')).toLowerCase();
+  var hints = [
+    'ship to',
+    'shipping to',
+    'do you ship',
+    'offer international',
+    'international shipping',
+    'internationally',
+    'deliver to',
+    'deliver within',
+    'only deliver',
+    'outside the uk',
+    'outside uk',
+    'europe',
+    'eu shipping',
+    'worldwide',
+    'only uk',
+    'uk only',
+    'within your country',
+    'within the uk',
+    'ship internationally',
+    'shipping outside'
+  ];
+  for (var i = 0; i < hints.length; i++) {
+    if (blob.indexOf(hints[i]) !== -1) return true;
+  }
+  if (blob.indexOf('international') !== -1 && (blob.indexOf('ship') !== -1 || blob.indexOf('deliver') !== -1)) {
+    return true;
+  }
+  return false;
+}
+
 function isInboxConfirmQuestion_(subject, body) {
+  if (isOwnerEscalationAsk_(subject, body)) return false;
   var blob = ((subject || '') + ' ' + (body || '')).toLowerCase();
   var hints = [
     'right inbox',
     'correct inbox',
     'right email',
     'correct email',
-    'store owner',
     'is this the store',
     'emailing the store',
-    'right contact'
+    'right contact',
+    'correct contact',
+    'store email',
+    'official email'
   ];
   for (var i = 0; i < hints.length; i++) {
     if (blob.indexOf(hints[i]) !== -1) return true;
+  }
+  // "is this the store owner contact?" without speak/connect → inbox confirm
+  if (
+    blob.indexOf('store owner') !== -1 &&
+    (blob.indexOf('contact') !== -1 || blob.indexOf('email') !== -1 || blob.indexOf('inbox') !== -1) &&
+    blob.indexOf('speak') === -1 &&
+    blob.indexOf('talk') === -1 &&
+    blob.indexOf('connect') === -1
+  ) {
+    return true;
   }
   return false;
 }

@@ -7,7 +7,7 @@ Classifier labels (LLM returns exactly one):
 | `PITCH` | Auto-decline from hello@; label `inbox-bot/pitch`; archive |
 | `FAQ` | Auto-reply from store knowledge; label `inbox-bot/faq` |
 | `DEAL` | Discount / best / last price / coupon ask → reply with the **volume deal** (HTML when enabled); do not escalate |
-| `CUSTOMER` | Escalate to personal; label `inbox-bot/customer` |
+| `CUSTOMER` | Escalate to personal; label `inbox-bot/customer`. Owner asks: reply asking what it concerns, then escalate |
 | `UNCLEAR` | Escalate (same as customer); label `inbox-bot/unclear` |
 | `TRANSACTIONAL` | No bot action (Shopify, Google, banks, 2FA) |
 | `IGNORE` | Clear newsletter / bulk only; archive, no reply. Prefer `PITCH` (decline+deal) or `UNCLEAR` when a person wrote |
@@ -46,11 +46,21 @@ Answerable from store knowledge only (no order lookup):
 - Do you ship to Ireland / EU / US / internationally?
 - Is shipping UK only?
 - Is shipping free / is shipping included in the price?
-- Is this the right inbox / store email / store owner contact?
+- Is this the right inbox / store email / correct contact?
 - Is ourtechaccessories.com your official website?
-- Bare greetings / check-ins (“hi”, “are you there?”, “hello”)
+- Bare greetings / check-ins (“hi”, “are you there?”, “hello”) with **no** real question
 - Rough delivery times (general)
 - Contact / who is this store
+
+**Not** bare greetings: “Hi there, do you offer international shipping?” → answer UK-only shipping.
+
+## Speak to the owner
+
+Ask what the request is about, then escalate to personal (label `inbox-bot/customer`). Do **not** send the generic support intro.
+
+- “Can I speak with the store owner?”
+- “Connect me to the store owner”
+- “Put me through to the manager”
 
 ## DEAL (discount / price) — examples
 
@@ -67,7 +77,7 @@ Default facts today: **UK shipping only**; international planned later with **no
 Shipping cost: **some products free UK shipping**, others a fee at checkout — never claim always free or always charged.  
 Inbox confirm: yes, `hello@` is the official store customer email; do not share personal contact details. If that line is only a pitch opener, classify as **PITCH**.  
 Website confirm: yes, `ourtechaccessories.com` is the official site.  
-Generic greeting: FAQ with the fixed support-intro reply (not escalate).
+Generic greeting: FAQ with the fixed support-intro reply (not escalate) — only when there is **no** real question.
 
 ## Escalate (CUSTOMER) — examples
 
@@ -75,6 +85,7 @@ Generic greeting: FAQ with the fixed support-intro reply (not escalate).
 - Refund, return, damaged item, wrong colour
 - Checkout or payment problems
 - Anything needing an order number lookup
+- Ask to speak with the store owner / manager (bot asks what it concerns, then escalates)
 - Wholesale only if they sound like a real buyer (when unsure → UNCLEAR → escalate)
 
 ## Follow-ups (same thread)
