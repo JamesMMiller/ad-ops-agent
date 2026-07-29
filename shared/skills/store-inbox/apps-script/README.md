@@ -52,7 +52,7 @@ Full docs: [`../prompting/deal-followup.md`](../prompting/deal-followup.md).
 - **DEAL** → discount / last-price asks → volume deal HTML from `/pages/inbox-deal` (or text tiers).
 - **FAQ** → short auto-reply from store knowledge (UK shipping, etc.); label `inbox-bot/faq`.
   “Hi there” + a real question (e.g. international shipping) is answered, not treated as a bare greeting.
-- **Owner ask** → “speak to the owner / connect me to the owner” → ask what it concerns, escalate to personal.
+- **Owner ask** → pitch → decline + deal; customer/order → escalate (ask what it concerns if bare); unclear → ask + escalate.
 - **CUSTOMER / UNCLEAR** → email personal with excerpt; leave/label for you to reply From hello@ in Gmail.
 - **CLOSE** (thanks / wrapped up) → optional one-shot **deal follow-up** HTML when `DEAL_FOLLOWUP_ENABLED=true`.
 - Hourly **idle sweep**: FAQ/customer threads where we replied last and they stayed quiet → same deal once.

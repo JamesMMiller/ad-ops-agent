@@ -56,11 +56,19 @@ Answerable from store knowledge only (no order lookup):
 
 ## Speak to the owner
 
-Ask what the request is about, then escalate to personal (label `inbox-bot/customer`). Do **not** send the generic support intro.
+Route by intent — never treat as inbox-confirm FAQ:
 
-- “Can I speak with the store owner?”
-- “Connect me to the store owner”
-- “Put me through to the manager”
+| Intent | Action |
+|--------|--------|
+| **Pitch** (SEO / agency / partnership / marketing, or owner-ask after a pitch) | `PITCH` → decline + deal follow-up (one outbound) |
+| **Customer / order** (order, refund, shipping help, product, or ongoing FAQ/customer thread) | Escalate to personal. If they only say “connect me to the owner” with no topic, ask what it concerns first, then escalate |
+| **Unclear** | Ask what it concerns + escalate |
+
+Examples:
+- “Can I speak with the store owner about a partnership / SEO?” → pitch decline + deal
+- “Connect me to the owner — order #1002 not arrived” → escalate
+- “Can I speak with the store owner?” on a shipping FAQ thread → ask what it concerns + escalate
+- Bare “Connect me to the store owner?” → ask what it concerns + escalate
 
 ## DEAL (discount / price) — examples
 
@@ -85,7 +93,9 @@ Generic greeting: FAQ with the fixed support-intro reply (not escalate) — only
 - Refund, return, damaged item, wrong colour
 - Checkout or payment problems
 - Anything needing an order number lookup
-- Ask to speak with the store owner / manager (bot asks what it concerns, then escalates)
+- Ask to speak with the store owner / manager:
+  - Pitch → decline + deal follow-up
+  - Customer / order → escalate (ask what it concerns when the topic is bare)
 - Wholesale only if they sound like a real buyer (when unsure → UNCLEAR → escalate)
 
 ## Follow-ups (same thread)

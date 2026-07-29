@@ -45,9 +45,10 @@ var DEFAULT_STORE_FAQ =
   'If asked "is this the right inbox / store email / correct contact": confirm this is the store\'s customer email. ' +
   'Do not share personal name, personal email, phone, or home address. ' +
   'Do not role-play as a named owner.\n' +
-  'If they ask to speak with / talk to / connect to the store owner or manager (and it is not a sales pitch): ' +
-  'ask what their request is about (order, product, shipping, something else). Do NOT claim you are the owner. ' +
-  'Do NOT reply with only the generic support intro.\n' +
+  'If they ask to speak with / talk to / connect to the store owner or manager: ' +
+  'pitch/SEO/agency/partnership → decline with deal follow-up; ' +
+  'customer or order related → escalate (ask what it concerns if they give no topic). ' +
+  'Do NOT claim you are the owner. Do NOT reply with only the generic support intro.\n' +
   'Generic greetings / check-ins with no real question (hi, hello, are you there, anyone there): ' +
   'reply with the short customer-support intro. Confirm this is the store support email and ask them to reply with product or order details (order number if they have one). ' +
   'A message that starts with "Hi there" but then asks a real question (e.g. shipping) is NOT a bare greeting — answer the question.\n' +
@@ -454,15 +455,25 @@ function triageThreadLocked_(thread) {
     label = 'DEAL';
   }
 
-  // "Speak to the owner" → ask what it concerns + escalate (not inbox-confirm FAQ).
+  // "Speak to the owner" — route by intent (never treat as inbox-confirm FAQ).
   if (
     isOwnerEscalationAsk_(subject, body) &&
-    label !== 'PITCH' &&
     label !== 'BOT' &&
     label !== 'TRANSACTIONAL' &&
     label !== 'DEAL'
   ) {
-    label = 'OWNER_ASK';
+    if (label === 'PITCH' || looksLikePitch_(subject, body, context)) {
+      label = 'PITCH';
+    } else if (
+      hasOrderSupportSignals_(subject, body) ||
+      isCustomerRelatedOwnerContext_(thread, subject, body, context)
+    ) {
+      // Customer / order: escalate. Bare "connect me to owner" still asks what it concerns.
+      label = ownerAskIsBare_(subject, body) ? 'OWNER_ASK' : 'CUSTOMER';
+    } else if (label !== 'PITCH') {
+      // Unknown topic → ask what it concerns + escalate (safer than silent decline).
+      label = 'OWNER_ASK';
+    }
   }
 
   if (label === 'BOT') {
@@ -673,11 +684,14 @@ function geminiClassify_(apiKey, from, subject, body, context) {
     'classify as FAQ/DEAL/CUSTOMER for that question and answer it.\n' +
     'If the message ONLY asks whether this is the right store inbox/contact, choose FAQ and confirm hello@ is the store customer email.\n' +
     'If the message ONLY asks whether ourtechaccessories.com is the official website, choose FAQ and confirm yes.\n' +
-    'If they ask to speak with / talk to / connect to the store owner or manager (and it is not a pitch), ' +
-    'choose CUSTOMER. Do NOT treat that as FAQ inbox-confirm.\n' +
+    'If they ask to speak with / talk to / connect to the store owner or manager:\n' +
+    '- If it is (or follows) a sales/SEO/agency/partnership pitch → choose PITCH (decline + deal).\n' +
+    '- If it is customer/order related (order, shipping help, product, refund, or an ongoing support thread) → choose CUSTOMER (escalate).\n' +
+    '- If unclear what they want the owner for → choose CUSTOMER (escalate; we will ask what it concerns).\n' +
+    'Do NOT treat "speak to the owner" as FAQ inbox-confirm.\n' +
     'If "right inbox / official website" is just an opener before SEO, partnership, agency, or marketing pitch, choose PITCH.\n' +
     'CUSTOMER = order number, tracking, refund, return, damaged item, wrong colour, payment problem, ' +
-    'ask to speak to the owner/manager, or anything needing account/order data.\n' +
+    'customer ask to speak to the owner/manager, or anything needing account/order data.\n' +
     'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate. Do NOT use UNCLEAR for a bare greeting or a clear discount ask.\n' +
     'TRANSACTIONAL = receipts, Shopify, Google, banks, 2FA.\n' +
     'CLOSE = thread wrapping up: short thanks / cheers / all good / that helps / perfect / sorted, ' +
@@ -736,11 +750,14 @@ function heuristicClassify_(from, subject, body) {
   for (var j = 0; j < pitchHints.length; j++) {
     if (blob.indexOf(pitchHints[j]) !== -1) hits++;
   }
-  if (hits >= 1) {
+  if (hits >= 1 || looksLikePitch_(subject, body, '')) {
     return { label: 'PITCH', reason: 'pitch keywords x' + hits, confidence: 0.65 };
   }
 
   if (isOwnerEscalationAsk_(subject, body)) {
+    if (hasOrderSupportSignals_(subject, body)) {
+      return { label: 'CUSTOMER', reason: 'owner ask + order/support', confidence: 0.85 };
+    }
     return { label: 'CUSTOMER', reason: 'asked for store owner/manager', confidence: 0.8 };
   }
 
@@ -1155,6 +1172,128 @@ function isOwnerEscalationAsk_(subject, body) {
   }
   if (blob.indexOf('connect me to the store owner') !== -1) return true;
   return false;
+}
+
+/**
+ * Sales / SEO / agency cold outreach — including "speak to the owner" as a pitch closer.
+ * Prefer LATEST message signals; PRIOR CONTEXT only when the latest is a short owner-ask.
+ */
+function looksLikePitch_(subject, body, context) {
+  var latest = (String(subject || '') + ' ' + String(body || '')).toLowerCase();
+  var hints = [
+    'seo',
+    'backlink',
+    'guest post',
+    'link building',
+    'partnership opportunity',
+    'partnership',
+    'collaborate with',
+    'collaboration',
+    'influencer',
+    'i can help you',
+    'stop spam',
+    'fake customer',
+    'marketing agency',
+    'digital marketing',
+    'grow your store',
+    'grow your sales',
+    'facebook ads expert',
+    'google ads',
+    'we noticed your store',
+    'warm response',
+    'white hat',
+    'off-page',
+    'rank on google',
+    'lead generation',
+    'i run an agency',
+    'our agency',
+    'media buying',
+    'shopify expert',
+    'free audit',
+    'proposal for you'
+  ];
+  var hits = 0;
+  for (var i = 0; i < hints.length; i++) {
+    if (latest.indexOf(hints[i]) !== -1) hits++;
+  }
+  if (hits >= 1) return true;
+
+  // Short owner-ask after a pitch in prior THEM messages
+  if (isOwnerEscalationAsk_(subject, body) && context) {
+    var ctx = String(context).toLowerCase();
+    for (var j = 0; j < hints.length; j++) {
+      if (ctx.indexOf('them:') !== -1 && ctx.indexOf(hints[j]) !== -1) return true;
+    }
+  }
+  return false;
+}
+
+/** Ongoing or clear customer/order support (vs pitch). */
+function isCustomerRelatedOwnerContext_(thread, subject, body, context) {
+  if (hasOrderSupportSignals_(subject, body)) return true;
+  if (isShippingFaqAsk_(subject, body)) return true;
+  if (thread) {
+    if (
+      hasLabel_(thread, LABEL_CUSTOMER) ||
+      hasLabel_(thread, LABEL_FAQ) ||
+      hasLabel_(thread, LABEL_UNCLEAR)
+    ) {
+      return true;
+    }
+  }
+  var latest = (String(subject || '') + ' ' + String(body || '')).toLowerCase();
+  var customerHints = [
+    'my order',
+    'order number',
+    'order #',
+    'tracking',
+    'refund',
+    'return',
+    'damaged',
+    'wrong colour',
+    'wrong color',
+    'i bought',
+    'i ordered',
+    'my purchase',
+    'product question',
+    'about my',
+    'delivery of my',
+    'where is my'
+  ];
+  for (var i = 0; i < customerHints.length; i++) {
+    if (latest.indexOf(customerHints[i]) !== -1) return true;
+  }
+  if (context) {
+    var ctx = String(context);
+    // Prior shopper messages about shipping / orders / products
+    if (
+      /THEM:.*\b(ship|shipping|deliver|order|refund|return|product|bought|charger|fan)\b/i.test(ctx) &&
+      !looksLikePitch_(subject, body, '')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** True when the message is basically only "speak to the owner" with no stated topic. */
+function ownerAskIsBare_(subject, body) {
+  var raw = String(body || '');
+  raw = raw.replace(/sent from .*$/gim, '');
+  raw = raw.replace(/get outlook for .*$/gim, '');
+  var text = (String(subject || '') + ' ' + raw).toLowerCase();
+  text = text.replace(/https?:\/\/\S+/g, ' ');
+  text = text
+    .replace(/\b(speak|talk|chat)\s+(to|with)\s+(the\s+)?(store\s+)?(owner|manager)\b/g, ' ')
+    .replace(/\bconnect\s+me\s+(to|with)\s+(the\s+)?(store\s+)?(owner|manager)\b/g, ' ')
+    .replace(/\b(put|pass)\s+me\s+(through\s+)?(to\s+)?(the\s+)?(store\s+)?(owner|manager)\b/g, ' ')
+    .replace(/\bcan i (speak|talk) (to|with)\b/g, ' ')
+    .replace(/\b(the\s+)?(store\s+)?(owner|manager)\b/g, ' ')
+    .replace(/\b(hi|hello|hey|there|please|thanks|thank you|can|you|me|to|with|the|a|an)\b/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return !text || text.length < 12;
 }
 
 /** International / destination / UK-only shipping questions. */
