@@ -12,6 +12,8 @@ const pct = (n) => (n == null ? "—" : `${Math.round(n * 100)}%`);
 
 let snapshot = null;
 let chart = null;
+let productChart = null;
+let selectedProductKey = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -112,6 +114,201 @@ function renderUnitTable(rows) {
       </tr>`,
     )
     .join("");
+}
+
+function renderProductTable(rows) {
+  const table = el("product-table");
+  const heading = el("product-pnl-heading");
+  if (!table) return;
+  const tbody = table.querySelector("tbody");
+  if (!tbody) return;
+
+  if (heading) {
+    heading.textContent = rows?.length
+      ? `Product profitability · ${rows.length} product${rows.length === 1 ? "" : "s"}`
+      : "Product profitability";
+  }
+
+  if (!rows || !rows.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="9" class="muted">No paid orders in this snapshot yet. Hit Refresh.</td></tr>';
+    const detail = el("product-detail");
+    if (detail) {
+      detail.innerHTML =
+        '<p class="muted">Select a product row to dig into variants and orders.</p>';
+    }
+    destroyProductChart();
+    return;
+  }
+
+  if (
+    !selectedProductKey ||
+    !rows.some((r) => r.key === selectedProductKey)
+  ) {
+    selectedProductKey = rows[0].key;
+  }
+
+  tbody.innerHTML = rows
+    .map((r) => {
+      const selected = r.key === selectedProductKey ? "selected" : "";
+      const contribCls =
+        r.contrib > 0 ? "contrib-pos" : r.contrib < 0 ? "contrib-neg" : "";
+      return `<tr class="${selected}" data-key="${escapeHtml(r.key)}">
+        <td>${escapeHtml(r.product)}</td>
+        <td>${r.orders}</td>
+        <td>${r.units}</td>
+        <td>${money(r.revenue)}</td>
+        <td>${money(r.cogs)}</td>
+        <td>${money(r.fees)}</td>
+        <td class="${contribCls}">${money(r.contrib)}</td>
+        <td>${pct(r.margin)}</td>
+        <td>${money(r.avg_unit)}</td>
+      </tr>`;
+    })
+    .join("");
+
+  tbody.querySelectorAll("tr[data-key]").forEach((tr) => {
+    tr.addEventListener("click", () => {
+      selectedProductKey = tr.getAttribute("data-key");
+      renderProductTable(rows);
+    });
+  });
+
+  const selected = rows.find((r) => r.key === selectedProductKey) || rows[0];
+  try {
+    renderProductDetail(selected);
+  } catch (e) {
+    console.error("product detail failed", e);
+  }
+  try {
+    renderProductChart(rows);
+  } catch (e) {
+    console.error("product chart failed", e);
+  }
+}
+
+function renderProductDetail(row) {
+  const box = el("product-detail");
+  if (!row) {
+    box.innerHTML =
+      '<p class="muted">Select a product row to dig into variants and orders.</p>';
+    return;
+  }
+
+  const variants = (row.variants || [])
+    .map(
+      (v) => `<tr>
+        <td>${escapeHtml(v.variant)}</td>
+        <td>${escapeHtml(v.sku)}</td>
+        <td>${v.units}</td>
+        <td>${money(v.revenue)}</td>
+        <td>${money(v.contrib)}</td>
+        <td>${pct(v.margin)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const lines = (row.order_lines || [])
+    .map(
+      (l) => `<tr>
+        <td>${escapeHtml(l.order || "")}</td>
+        <td>${escapeHtml(l.date || "")}</td>
+        <td>${escapeHtml(l.variant)}</td>
+        <td>${l.qty}</td>
+        <td>${money(l.unit)}</td>
+        <td class="${l.contrib > 0 ? "contrib-pos" : l.contrib < 0 ? "contrib-neg" : ""}">${money(l.contrib)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  box.innerHTML = `
+    <h3>${escapeHtml(row.product)}</h3>
+    <p class="muted detail-meta">
+      ${row.orders} order${row.orders === 1 ? "" : "s"} · ${row.units} unit${row.units === 1 ? "" : "s"} ·
+      avg sell ${money(row.avg_unit)} · contrib ${money(row.contrib)} (${pct(row.margin)})
+    </p>
+    <h4>By variant</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Variant</th>
+            <th>SKU</th>
+            <th>Units</th>
+            <th>Revenue</th>
+            <th>Contrib</th>
+            <th>Margin</th>
+          </tr>
+        </thead>
+        <tbody>${variants || '<tr><td colspan="6" class="muted">No variants</td></tr>'}</tbody>
+      </table>
+    </div>
+    <h4>Order lines</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Date</th>
+            <th>Variant</th>
+            <th>Qty</th>
+            <th>Unit £</th>
+            <th>Contrib</th>
+          </tr>
+        </thead>
+        <tbody>${lines || '<tr><td colspan="6" class="muted">No lines</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+function destroyProductChart() {
+  if (productChart) {
+    productChart.destroy();
+    productChart = null;
+  }
+}
+
+function renderProductChart(rows) {
+  destroyProductChart();
+  const canvas = el("product-chart");
+  if (!rows || !rows.length || !canvas) return;
+
+  const sorted = [...rows].sort((a, b) => b.contrib - a.contrib);
+  productChart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: sorted.map((r) => r.product),
+      datasets: [
+        {
+          label: "Contribution (£)",
+          data: sorted.map((r) => r.contrib),
+          backgroundColor: sorted.map((r) =>
+            r.contrib >= 0 ? "rgba(6, 118, 71, 0.75)" : "rgba(180, 35, 24, 0.75)",
+          ),
+        },
+      ],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: "Contribution by product (pre ads / KIE)",
+          align: "start",
+          color: "#6b6b6b",
+          font: { size: 12, weight: "500" },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { callback: (v) => `£${v}` },
+        },
+      },
+    },
+  });
 }
 
 function destroyChart() {
@@ -344,6 +541,7 @@ function renderAll(data) {
   renderStats(data);
   const days = data.pnl?.days || [];
   renderDailyTable(days);
+  renderProductTable(data.product_pnl || []);
   renderUnitTable(data.unit_economics || []);
   renderChart(el("chart-view").value, days);
 }

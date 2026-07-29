@@ -79,5 +79,6 @@ Used by **`shopify-store`** (`shared/skills/shopify-store/`).
 - **Local projects:** `outputs/shopify/projects/<name>/` (gitignored)
 - **Main theme ID:** _(fill after `shopify_cli.py list-themes`)_
 - **Public contact:** `hello@ourtechaccessories.com` — see `shared/skills/store-inbox/`
+- **Inbox deal bodies (JSON):** `https://ourtechaccessories.com/pages/inbox-deal` — theme `page.inbox-deal.liquid`; rebuild via `shared/skills/store-inbox/scripts/build-inbox-deal-page.py`
 
 Credentials: `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` in `.env` only.

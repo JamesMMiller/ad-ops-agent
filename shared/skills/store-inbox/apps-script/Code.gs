@@ -11,10 +11,16 @@
  *   DRY_RUN             = true|false  (default false)
  *   STORE_FAQ           = optional override of default store knowledge (see prompting/store-faq.md)
  *   DEAL_FOLLOWUP_ENABLED = true|false (default false) — closed-thread deal mail
- *   DEAL_FOLLOWUP_IDLE_HOURS = hours after our last reply before idle deal (default 48)
+ *   DEAL_FOLLOWUP_IDLE_HOURS = hours after our last reply before idle deal (default 24)
+ *   EMAIL_DAILY_BUDGET   = soft cap on bot sends/day (default 80; consumer Gmail hard cap is ~100)
+ *   EMAIL_PER_RUN_MAX    = max sends per triage/sweep run (default 5)
+ *   EMAIL_QUOTA_RESERVE  = stop when MailApp remaining ≤ this (default 5)
+ *   SPAM_RESCUE_PER_RUN  = max Spam→Inbox moves per triage (default 2)
+ *   SPAM_RESCUE_DAILY_MAX = max rescues per day (default 10)
+ *   DEAL_BODIES_URL     = https://ourtechaccessories.com/pages/inbox-deal (JSON html+plain)
  *   DEAL_SUBJECT / DEAL_HTML / DEAL_PLAIN / DEAL_*_DRIVE_ID — optional body overrides
  *
- * Also paste DealFollowupBodies.gs (default GaN deal HTML/plain) into the same project.
+ * Also paste DealFollowupBodies.gs (fallback GaN deal HTML/plain) into the same project.
  */
 
 var DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
@@ -27,6 +33,10 @@ var LABEL_DONE = 'inbox-bot/processed';
 var LABEL_DEAD = 'inbox-bot/dead';
 var LABEL_DEAL = 'inbox-bot/deal-followup';
 var LABEL_CLOSE = 'inbox-bot/closed';
+var LABEL_RESCUED = 'inbox-bot/rescued-from-spam';
+
+/** Reset each triageRecent / dealFollowUpSweep invocation. */
+var EMAILS_SENT_THIS_RUN_ = 0;
 
 /** Default knowledge — keep in sync with prompting/store-faq.md */
 var DEFAULT_STORE_FAQ =
@@ -48,6 +58,9 @@ var DEFAULT_STORE_FAQ =
   'Never invent a pound amount. Point customers to the product page / checkout for the exact cost for their basket.\n' +
   'Delivery: Usually a few working days after dispatch within the UK; depends on product/carrier. Some PDPs say 3-7 working days for UK stock.\n' +
   'Never invent order status, tracking numbers, refunds, or returns decisions. Those need a human.\n' +
+  'Discount / best price / last price / coupon asks: answer directly. Site prices are normal single-item prices. ' +
+  'We run a volume deal on the 120W GaN retractable charger (2=15% off, 3=20% off, 4+=25% off). ' +
+  'Do not invent other coupon codes or one-off markdowns. Send the current volume deal details.\n' +
   'Tone: short UK English, calm, human. No em dashes. No corporate or chatbot filler.';
 
 function installTriggers() {
@@ -62,15 +75,52 @@ function installTriggers() {
 }
 
 function triageRecent() {
+  EMAILS_SENT_THIS_RUN_ = 0;
   ensureLabels_();
-  // Do NOT exclude inbox-bot/processed — follow-ups stay on the same thread.
+  if (!canSendEmail_(1)) {
+    Logger.log(
+      'triageRecent aborted: daily email quota low (remaining=' +
+        emailQuotaRemaining_() +
+        ', budgetUsed=' +
+        emailBudgetUsed_() +
+        '). Quotas reset ~24h after first send.'
+    );
+    return;
+  }
+  // Gmail often parks cold outreach (and some real shoppers) in Spam.
+  // We never move mail *to* Spam — we rescue a few human-looking threads, then triage.
+  rescueSpamCandidates_();
+  var maxSends = Number(props_().getProperty('EMAIL_PER_RUN_MAX') || '5');
+  if (!(maxSends > 0)) maxSends = 5;
   var threads = GmailApp.search('in:inbox newer_than:2d', 0, 30);
-  threads.forEach(triageThread_);
+  for (var i = 0; i < threads.length; i++) {
+    if (EMAILS_SENT_THIS_RUN_ >= maxSends) {
+      Logger.log('triageRecent: EMAIL_PER_RUN_MAX=' + maxSends + ' reached — defer rest');
+      break;
+    }
+    if (!canSendEmail_(1)) {
+      Logger.log('triageRecent: stopping early — email quota low');
+      break;
+    }
+    triageThread_(threads[i]);
+  }
+  Logger.log(
+    'triageRecent done sendsThisRun=' +
+      EMAILS_SENT_THIS_RUN_ +
+      ' remaining=' +
+      emailQuotaRemaining_()
+  );
 }
 
 /** Manual test from the script editor */
 function triageOneTest() {
+  EMAILS_SENT_THIS_RUN_ = 0;
   ensureLabels_();
+  if (!canSendEmail_(1)) {
+    Logger.log('triageOneTest aborted: email quota low remaining=' + emailQuotaRemaining_());
+    return;
+  }
+  rescueSpamCandidates_();
   var threads = GmailApp.search('in:inbox newer_than:7d', 0, 5);
   if (!threads.length) {
     Logger.log('No inbox threads');
@@ -85,12 +135,245 @@ function triageOneTest() {
   Logger.log('No threads with a new inbound message to triage');
 }
 
+/** Manual: log MailApp remaining quota + bot budget counters. */
+function logEmailQuota() {
+  Logger.log(
+    'MailApp remaining=' +
+      emailQuotaRemaining_() +
+      ' budgetUsed=' +
+      emailBudgetUsed_() +
+      '/' +
+      emailDailyBudget_() +
+      ' spamRescuedToday=' +
+      spamRescueUsed_()
+  );
+}
+
+/**
+ * Pull likely-human mail out of Gmail Spam into Inbox so triage can reply
+ * (decline+deal, FAQ, DEAL, or escalate). Leave clear bots / bulk newsletters in Spam.
+ * Hard-capped — a big Spam folder must not burn the daily send quota.
+ */
+function rescueSpamCandidates_() {
+  var dry = String(props_().getProperty('DRY_RUN') || 'false').toLowerCase() === 'true';
+  if (!canSendEmail_(1)) {
+    Logger.log('rescueSpamCandidates_: skip — email quota low');
+    return;
+  }
+  var maxRun = Number(props_().getProperty('SPAM_RESCUE_PER_RUN') || '2');
+  var maxDay = Number(props_().getProperty('SPAM_RESCUE_DAILY_MAX') || '10');
+  if (!(maxRun > 0)) maxRun = 2;
+  if (!(maxDay > 0)) maxDay = 10;
+  var usedDay = spamRescueUsed_();
+  if (usedDay >= maxDay) {
+    Logger.log('rescueSpamCandidates_: daily max ' + maxDay + ' reached');
+    return;
+  }
+  var room = Math.min(maxRun, maxDay - usedDay);
+  var threads = GmailApp.search('in:spam newer_than:14d', 0, 25);
+  Logger.log('rescueSpamCandidates_: spam pool=' + threads.length + ' room=' + room);
+  var rescued = 0;
+  for (var i = 0; i < threads.length && rescued < room; i++) {
+    var thread = threads[i];
+    var messages = thread.getMessages();
+    if (!messages.length) continue;
+    var msg = messages[messages.length - 1];
+    var from = msg.getFrom();
+    var subject = msg.getSubject() || '';
+    var body = String(msg.getPlainBody() || msg.getBody() || '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 6000);
+
+    if (isTransactionalSender_(from, subject)) continue;
+    if (isClearlyBot_(from, subject, body)) continue;
+    if (looksLikeBulkNewsletter_(from, subject, body)) continue;
+    if (hasLabel_(thread, LABEL_RESCUED)) continue;
+
+    Logger.log(
+      'Rescuing from Spam → Inbox thread=' +
+        thread.getId() +
+        ' from=' +
+        from +
+        ' subject=' +
+        subject.slice(0, 80)
+    );
+    if (dry) continue;
+    thread.moveToInbox();
+    thread.addLabel(getLabel_(LABEL_RESCUED));
+    noteSpamRescue_();
+    rescued++;
+  }
+  Logger.log('rescueSpamCandidates_: rescued=' + rescued);
+}
+
+/** Clear marketing bulk — leave in Spam; do not rescue. */
+function looksLikeBulkNewsletter_(from, subject, body) {
+  var f = (from || '').toLowerCase();
+  var blob = ((subject || '') + ' ' + (body || '')).toLowerCase();
+  if (
+    f.indexOf('noreply@') !== -1 ||
+    f.indexOf('no-reply@') !== -1 ||
+    f.indexOf('newsletter@') !== -1 ||
+    f.indexOf('news@') !== -1 ||
+    f.indexOf('marketing@') !== -1
+  ) {
+    return true;
+  }
+  var hints = [
+    'unsubscribe',
+    'view in browser',
+    'view this email in your browser',
+    'email preferences',
+    'manage your subscription',
+    'you are receiving this because',
+    'you\'re receiving this email because',
+    'this is a marketing email',
+    'newsletter'
+  ];
+  var hits = 0;
+  for (var i = 0; i < hints.length; i++) {
+    if (blob.indexOf(hints[i]) !== -1) hits++;
+  }
+  return hits >= 2;
+}
+
+/** --- Email quota guards (consumer Gmail ≈ 100 recipients/day) --- */
+
+function emailDayKey_() {
+  var tz = Session.getScriptTimeZone() || 'Europe/London';
+  return Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+}
+
+function emailDailyBudget_() {
+  var n = Number(props_().getProperty('EMAIL_DAILY_BUDGET') || '80');
+  return n > 0 ? n : 80;
+}
+
+function emailBudgetUsed_() {
+  return Number(props_().getProperty('emailSentCount:' + emailDayKey_()) || '0');
+}
+
+function emailQuotaRemaining_() {
+  try {
+    return MailApp.getRemainingDailyQuota();
+  } catch (e) {
+    Logger.log('MailApp.getRemainingDailyQuota failed: ' + e);
+    return 999;
+  }
+}
+
+function canSendEmail_(need) {
+  need = need || 1;
+  var reserve = Number(props_().getProperty('EMAIL_QUOTA_RESERVE') || '5');
+  if (!(reserve >= 0)) reserve = 5;
+  var remaining = emailQuotaRemaining_();
+  if (remaining >= 0 && remaining <= reserve + need - 1) {
+    Logger.log(
+      'canSendEmail_: MailApp remaining=' + remaining + ' reserve=' + reserve + ' need=' + need
+    );
+    return false;
+  }
+  var used = emailBudgetUsed_();
+  var budget = emailDailyBudget_();
+  if (used + need > budget) {
+    Logger.log('canSendEmail_: budget ' + used + '/' + budget + ' (need ' + need + ')');
+    return false;
+  }
+  var maxRun = Number(props_().getProperty('EMAIL_PER_RUN_MAX') || '5');
+  if (maxRun > 0 && EMAILS_SENT_THIS_RUN_ + need > maxRun) {
+    Logger.log('canSendEmail_: per-run max ' + EMAILS_SENT_THIS_RUN_ + '/' + maxRun);
+    return false;
+  }
+  return true;
+}
+
+function noteEmailSent_(n) {
+  n = n || 1;
+  EMAILS_SENT_THIS_RUN_ += n;
+  var key = 'emailSentCount:' + emailDayKey_();
+  props_().setProperty(key, String(emailBudgetUsed_() + n));
+}
+
+function spamRescueUsed_() {
+  return Number(props_().getProperty('spamRescueCount:' + emailDayKey_()) || '0');
+}
+
+function noteSpamRescue_() {
+  props_().setProperty('spamRescueCount:' + emailDayKey_(), String(spamRescueUsed_() + 1));
+}
+
+function isEmailQuotaError_(err) {
+  var s = String(err || '').toLowerCase();
+  return s.indexOf('too many times') !== -1 && s.indexOf('email') !== -1;
+}
+
+/** thread.reply with quota check + counting. Throws EmailQuotaError if blocked. */
+function safeThreadReply_(thread, body, options) {
+  if (!canSendEmail_(1)) {
+    throw new Error('EmailQuota: daily/run budget exhausted — defer send');
+  }
+  try {
+    thread.reply(body, options || {});
+  } catch (e) {
+    if (isEmailQuotaError_(e)) {
+      throw new Error('EmailQuota: ' + e);
+    }
+    throw e;
+  }
+  noteEmailSent_(1);
+}
+
+function safeSendEmail_(to, subject, body, options) {
+  if (!canSendEmail_(1)) {
+    throw new Error('EmailQuota: daily/run budget exhausted — defer send');
+  }
+  try {
+    GmailApp.sendEmail(to, subject, body, options || {});
+  } catch (e) {
+    if (isEmailQuotaError_(e)) {
+      throw new Error('EmailQuota: ' + e);
+    }
+    throw e;
+  }
+  noteEmailSent_(1);
+}
+
+function clearRepliedToMessage_(thread, msg) {
+  props_().deleteProperty(replyClaimKey_(thread, msg));
+}
+
+function clearDealSent_(thread) {
+  try {
+    var label = GmailApp.getUserLabelByName(LABEL_DEAL);
+    if (label) thread.removeLabel(label);
+  } catch (e) {
+    /* ignore */
+  }
+  props_().deleteProperty(dealSentPropKey_(thread));
+}
+
 /**
  * Process a thread when the latest message is inbound and newer than our last handle.
  * Follow-ups on the same thread are supported (per-message watermark, not thread-done).
  * Dead only for: already declined pitches, or clearly automated/bot mail.
  */
 function triageThread_(thread) {
+  // Prevent overlapping triggers from double-sending the same inbound message.
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (e) {
+    Logger.log('triageThread_ lock timeout: ' + e);
+    return;
+  }
+  try {
+    triageThreadLocked_(thread);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function triageThreadLocked_(thread) {
   if (!needsTriage_(thread)) return;
 
   var messages = thread.getMessages();
@@ -100,6 +383,13 @@ function triageThread_(thread) {
   var body = msg.getPlainBody() || msg.getBody() || '';
   body = String(body).replace(/\s+/g, ' ').slice(0, 6000);
   var dry = String(props_().getProperty('DRY_RUN') || 'false').toLowerCase() === 'true';
+
+  // Same inbound message already got a bot reply (crash / overlapping run).
+  if (alreadyRepliedToMessage_(thread, msg)) {
+    Logger.log('Already replied to msg ' + msg.getId() + ' on thread ' + thread.getId());
+    markThreadProcessed_(thread, msg);
+    return;
+  }
 
   // Already dead: swallow inbound quietly
   if (isDead_(thread)) {
@@ -148,6 +438,17 @@ function triageThread_(thread) {
       ')'
   );
 
+  // Discount / best-price asks → reply with the volume deal (never escalate).
+  if (
+    (label === 'DEAL' || isDiscountAsk_(subject, body)) &&
+    label !== 'PITCH' &&
+    label !== 'BOT' &&
+    label !== 'TRANSACTIONAL' &&
+    !hasOrderSupportSignals_(subject, body)
+  ) {
+    label = 'DEAL';
+  }
+
   if (label === 'BOT') {
     markDead_(thread, 'classifier: BOT (' + (result.reason || '') + ')');
     markThreadProcessed_(thread, msg);
@@ -156,39 +457,75 @@ function triageThread_(thread) {
     return;
   }
 
-  if (label === 'CLOSE' || (label === 'IGNORE' && isClosingThanks_(subject, body))) {
-    thread.addLabel(getLabel_(LABEL_CLOSE));
-    if (!dry && maybeSendDealFollowUp_(thread, msg, 'close')) {
-      // deal sent
-    } else if (!dry) {
-      thread.moveToArchive();
+  // Claim this inbound before any send so a second run cannot reply again.
+  // If quota blocks the send, clear the claim and leave watermark unset so we retry later.
+  if (!dry) {
+    if (!canSendEmail_(1)) {
+      Logger.log('Deferring thread ' + thread.getId() + ' — email quota low');
+      return;
     }
-  } else if (label === 'PITCH') {
-    thread.addLabel(getLabel_(LABEL_PITCH));
-    if (!dry) {
-      sendDecline_(thread, msg);
-      maybeSendDealFollowUp_(thread, msg, 'pitch');
-      thread.moveToArchive();
+    markRepliedToMessage_(thread, msg);
+  }
+
+  try {
+    if (label === 'CLOSE' || (label === 'IGNORE' && isClosingThanks_(subject, body))) {
+      thread.addLabel(getLabel_(LABEL_CLOSE));
+      if (!dry && maybeSendDealFollowUpUnlocked_(thread, msg, 'close')) {
+        // deal sent
+      } else if (!dry) {
+        thread.moveToArchive();
+      }
+    } else if (label === 'PITCH') {
+      thread.addLabel(getLabel_(LABEL_PITCH));
+      if (!dry) {
+        // One outbound only: deal mail already includes the "not looking for marketing" intro.
+        if (!(dealFollowUpEnabled_() && maybeSendDealFollowUpUnlocked_(thread, msg, 'pitch'))) {
+          sendDecline_(thread, msg);
+        }
+        thread.moveToArchive();
+      }
+      // Stop further bot triage (sweep may still send a missed deal).
+      markDead_(thread, 'pitch declined');
+    } else if (label === 'DEAL') {
+      thread.addLabel(getLabel_(LABEL_FAQ));
+      if (!dry) handleDiscountAsk_(thread, msg, true);
+    } else if (label === 'FAQ') {
+      thread.addLabel(getLabel_(LABEL_FAQ));
+      if (!dry) {
+        sendFaqReply_(thread, msg, from, subject, body, context);
+      }
+    } else if (label === 'IGNORE') {
+      if (!dry) thread.moveToArchive();
+    } else if (label === 'TRANSACTIONAL') {
+      // leave in inbox
+    } else {
+      // CUSTOMER or UNCLEAR
+      thread.addLabel(getLabel_(label === 'CUSTOMER' ? LABEL_CUSTOMER : LABEL_UNCLEAR));
+      if (!dry) escalate_(thread, msg, result);
     }
-    // Decline closes triage; deal (if enabled) already sent above
-    markDead_(thread, 'pitch declined');
-  } else if (label === 'FAQ') {
-    thread.addLabel(getLabel_(LABEL_FAQ));
-    if (!dry) {
-      sendFaqReply_(thread, msg, from, subject, body, context);
+  } catch (e) {
+    if (String(e).indexOf('EmailQuota') !== -1) {
+      Logger.log('Email quota hit mid-triage — clearing claim for retry: ' + e);
+      if (!dry) clearRepliedToMessage_(thread, msg);
+      return;
     }
-  } else if (label === 'IGNORE') {
-    if (!dry) thread.moveToArchive();
-  } else if (label === 'TRANSACTIONAL') {
-    // leave in inbox
-  } else {
-    // CUSTOMER or UNCLEAR
-    thread.addLabel(getLabel_(label === 'CUSTOMER' ? LABEL_CUSTOMER : LABEL_UNCLEAR));
-    if (!dry) escalate_(thread, msg, result);
+    throw e;
   }
 
   markThreadProcessed_(thread, msg);
   thread.addLabel(getLabel_(LABEL_DONE));
+}
+
+function replyClaimKey_(thread, msg) {
+  return 'replySent:' + thread.getId() + ':' + msg.getId();
+}
+
+function alreadyRepliedToMessage_(thread, msg) {
+  return props_().getProperty(replyClaimKey_(thread, msg)) === '1';
+}
+
+function markRepliedToMessage_(thread, msg) {
+  props_().setProperty(replyClaimKey_(thread, msg), '1');
 }
 
 function needsTriage_(thread) {
@@ -288,8 +625,10 @@ function geminiClassify_(apiKey, from, subject, body, context) {
   var faq = storeFaq_();
   var prompt =
     'You triage email for a small UK Shopify store (Our Tech Accessories).\n' +
-    'Return ONLY compact JSON: {"label":"PITCH|FAQ|CUSTOMER|UNCLEAR|TRANSACTIONAL|IGNORE|CLOSE|BOT","reason":"short","confidence":0.0}\n' +
+    'Return ONLY compact JSON: {"label":"PITCH|FAQ|DEAL|CUSTOMER|UNCLEAR|TRANSACTIONAL|IGNORE|CLOSE|BOT","reason":"short","confidence":0.0}\n' +
     'PITCH = sales/SEO/agency/partnership/"we can stop your spam" cold outreach.\n' +
+    'DEAL = customer asking for a discount, better/last/best price, coupon, voucher, promo, or "any deals/offers" ' +
+    'on store products (not refunds). Reply with the current volume deal. Do NOT escalate DEAL.\n' +
     'FAQ = general question answerable ONLY from this store knowledge (no order lookup needed):\n' +
     '---STORE KNOWLEDGE---\n' +
     faq +
@@ -298,6 +637,8 @@ function geminiClassify_(apiKey, from, subject, body, context) {
     'free shipping / shipping fee, is this the right inbox, is this the store email, ' +
     'am I emailing the store / store owner contact, is this your official website, ' +
     'ourtechaccessories.com official site, who are you / contact email.\n' +
+    'Examples of DEAL: "is this your last price?", "any discount?", "can you do better on price?", ' +
+    '"got a coupon?", "any promo on the charger?", "best price?"\n' +
     'If the message is ONLY a greeting or check-in with no real question ' +
     '(hi, hello, hey, are you there, anyone there, just checking), choose FAQ. ' +
     'Reply with the customer-support intro (this is store support; ask for product/order details).\n' +
@@ -305,15 +646,18 @@ function geminiClassify_(apiKey, from, subject, body, context) {
     'If the message ONLY asks whether ourtechaccessories.com is the official website, choose FAQ and confirm yes.\n' +
     'If "right inbox / store owner / official website" is just an opener before SEO, partnership, agency, or marketing pitch, choose PITCH.\n' +
     'CUSTOMER = order number, tracking, refund, return, damaged item, wrong colour, payment problem, or anything needing account/order data.\n' +
-    'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate. Do NOT use UNCLEAR for a bare greeting.\n' +
+    'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate. Do NOT use UNCLEAR for a bare greeting or a clear discount ask.\n' +
     'TRANSACTIONAL = receipts, Shopify, Google, banks, 2FA.\n' +
     'CLOSE = thread wrapping up: short thanks / cheers / all good / that helps / perfect / sorted, ' +
     'with no new question (prefer CLOSE over IGNORE when PRIOR CONTEXT shows we already helped).\n' +
-    'IGNORE = newsletters/bulk, or a short ok with no thanks and no new question.\n' +
+    'IGNORE = only clear newsletters/bulk with unsubscribe (no real question from a person). ' +
+    'When unsure, choose UNCLEAR, FAQ, or DEAL — never IGNORE a human question.\n' +
     'BOT = clearly an autoresponder, chatbot, or non-human loop (not a real shopper). Only when obvious.\n' +
     'This may be a follow-up in an existing thread. Use PRIOR CONTEXT when the latest message is short (e.g. "and Germany?").\n' +
+    'When unsure between DEAL and FAQ, choose DEAL if they are asking about price/discount.\n' +
     'When unsure between FAQ and CUSTOMER, choose CUSTOMER or UNCLEAR (never invent order facts).\n' +
     'When unsure between PITCH and CUSTOMER, choose UNCLEAR.\n' +
+    'When unsure between PITCH and IGNORE, choose PITCH (decline + optional deal) so a person still gets a reply.\n' +
     'When unsure whether BOT, do NOT choose BOT.\n\n' +
     (context ? 'PRIOR CONTEXT:\n' + context + '\n\n' : '') +
     'LATEST From: ' +
@@ -343,15 +687,12 @@ function heuristicClassify_(from, subject, body) {
     return { label: 'CLOSE', reason: 'closing thanks', confidence: 0.7 };
   }
 
-  var customerHints = [
-    'order #', 'order number', 'tracking', 'refund', 'return', 'parcel',
-    'damaged', 'wrong colour', 'wrong color', 'my package', 'where is my order',
-    'missing item', 'cancel my'
-  ];
-  for (var i = 0; i < customerHints.length; i++) {
-    if (blob.indexOf(customerHints[i]) !== -1) {
-      return { label: 'CUSTOMER', reason: 'customer keyword: ' + customerHints[i], confidence: 0.7 };
-    }
+  if (hasOrderSupportSignals_(subject, body)) {
+    return { label: 'CUSTOMER', reason: 'customer order/support signal', confidence: 0.7 };
+  }
+
+  if (isDiscountAsk_(subject, body)) {
+    return { label: 'DEAL', reason: 'discount/price ask', confidence: 0.8 };
   }
 
   var pitchHints = [
@@ -391,10 +732,136 @@ function heuristicClassify_(from, subject, body) {
   return { label: 'UNCLEAR', reason: 'no strong signal', confidence: 0.4 };
 }
 
+/** Order/refund support — escalate; do not treat as a discount ask. */
+function hasOrderSupportSignals_(subject, body) {
+  var blob = (String(subject || '') + ' ' + String(body || '')).toLowerCase();
+  var hints = [
+    'order #',
+    'order number',
+    'tracking',
+    'refund',
+    'return',
+    'parcel',
+    'damaged',
+    'wrong colour',
+    'wrong color',
+    'my package',
+    'where is my order',
+    'missing item',
+    'cancel my'
+  ];
+  for (var i = 0; i < hints.length; i++) {
+    if (blob.indexOf(hints[i]) !== -1) return true;
+  }
+  return false;
+}
+
+/** Shopper asking for a discount / better price (not a refund). */
+function isDiscountAsk_(subject, body) {
+  if (hasOrderSupportSignals_(subject, body)) return false;
+  var text = (String(subject || '') + ' ' + String(body || '')).toLowerCase();
+  text = text.replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  var hints = [
+    'last price',
+    'best price',
+    'final price',
+    'any discount',
+    'a discount',
+    'got a discount',
+    'have a discount',
+    'got discount',
+    'any deal',
+    'better price',
+    'lower price',
+    'lower the price',
+    'reduce the price',
+    'cheaper',
+    'price drop',
+    'coupon',
+    'voucher',
+    'promo code',
+    'promotional code',
+    'special offer',
+    'any offer',
+    'any promo',
+    'can you do better',
+    'is that your best',
+    'your best price',
+    'negotiate',
+    'do you discount',
+    'discounts available',
+    'student discount',
+    'bulk discount',
+    'volume discount'
+  ];
+  for (var i = 0; i < hints.length; i++) {
+    if (text.indexOf(hints[i]) !== -1) return true;
+  }
+  // Loose: "discount?" / "discount please" as a short message
+  if (/\bdiscounts?\b/.test(text) && text.length < 220) return true;
+  return false;
+}
+
+/**
+ * Customer asked for a discount / last price → send the volume deal (once per thread).
+ * If the deal already went out, send a short plain reminder instead.
+ * @param {boolean=} alreadyLocked true when caller holds ScriptLock (triage).
+ */
+function handleDiscountAsk_(thread, msg, alreadyLocked) {
+  if (dealAlreadySent_(thread) || threadLooksLikeDealAlreadySent_(thread)) {
+    if (threadLooksLikeDealAlreadySent_(thread) && !dealAlreadySent_(thread)) {
+      markDealSent_(thread, 'discount');
+    }
+    sendDiscountAlreadySentReply_(thread, msg);
+    return;
+  }
+  if (dealFollowUpEnabled_()) {
+    var sent = alreadyLocked
+      ? maybeSendDealFollowUpUnlocked_(thread, msg, 'discount')
+      : maybeSendDealFollowUp_(thread, msg, 'discount');
+    if (sent) return;
+    Logger.log('Discount deal send failed; falling back to text reply');
+  }
+  sendDiscountTextReply_(thread, msg);
+}
+
+function sendDiscountAlreadySentReply_(thread, msg) {
+  var hello = helloFrom_();
+  var body =
+    'Hi,\n\n' +
+    'The prices on the site are the normal single-item prices. ' +
+    'The volume deal we already shared on this thread is the current offer ' +
+    '(more chargers = a deeper discount). We do not have a separate one-off coupon beyond that.\n\n' +
+    'If you still need help with an order, reply with your order number.\n\n' +
+    'Our Tech Accessories\n' +
+    hello +
+    '\n';
+  safeThreadReply_(thread, sanitizeCustomerReply_(body), { from: hello });
+}
+
+function sendDiscountTextReply_(thread, msg) {
+  var hello = helloFrom_();
+  var body =
+    'Hi,\n\n' +
+    'Site prices are the normal single-item prices. We do not usually discount one-off, ' +
+    'but we do have a current volume deal on the 120W GaN charger with the built-in retractable cable:\n\n' +
+    '- 2 chargers: 15% off\n' +
+    '- 3 chargers: 20% off\n' +
+    '- 4 or more: 25% off\n\n' +
+    'You can mix colours in one order. Shop here:\n' +
+    'https://ourtechaccessories.com/products/120w-gan-fast-charger-with-a-built-in-retractable-cable\n\n' +
+    'Happy to help if you have a product question or an order number.\n\n' +
+    'Our Tech Accessories\n' +
+    hello +
+    '\n';
+  safeThreadReply_(thread, sanitizeCustomerReply_(body), { from: hello });
+}
+
 function sendFaqReply_(thread, msg, from, subject, body, context) {
   var hello = helloFrom_();
   var replyBody = sanitizeCustomerReply_(draftFaqReply_(from, subject, body, context));
-  thread.reply(replyBody, { from: hello });
+  safeThreadReply_(thread, replyBody, { from: hello });
 }
 
 function draftFaqReply_(from, subject, body, context) {
@@ -603,7 +1070,7 @@ function sendDecline_(thread, msg) {
       hello +
       '\n'
   );
-  thread.reply(decline, { from: hello });
+  safeThreadReply_(thread, decline, { from: hello });
 }
 
 function escalate_(thread, msg, result) {
@@ -640,7 +1107,7 @@ function escalate_(thread, msg, result) {
     hello +
     '.\n';
 
-  GmailApp.sendEmail(escalateTo, subject, body, { from: hello, name: 'Our Tech Inbox Bot' });
+  safeSendEmail_(escalateTo, subject, body, { from: hello, name: 'Our Tech Inbox Bot' });
 }
 
 function geminiJson_(apiKey, prompt) {
@@ -717,10 +1184,17 @@ function isFromUs_(from) {
   var f = (from || '').toLowerCase();
   var hello = helloFrom_().toLowerCase();
   var mailbox = (props_().getProperty('MAILBOX_ALIAS') || '').toLowerCase();
+  var active = '';
+  try {
+    active = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  } catch (e) {
+    /* ignore */
+  }
   return (
     f.indexOf(hello) !== -1 ||
     (mailbox && f.indexOf(mailbox) !== -1) ||
-    f.indexOf('our.tech.accessories@gmail.com') !== -1
+    f.indexOf('our.tech.accessories@gmail.com') !== -1 ||
+    (active && f.indexOf(active) !== -1)
   );
 }
 
@@ -741,7 +1215,8 @@ function ensureLabels_() {
     LABEL_DONE,
     LABEL_DEAD,
     LABEL_DEAL,
-    LABEL_CLOSE
+    LABEL_CLOSE,
+    LABEL_RESCUED
   ].forEach(function (name) {
     getLabel_(name);
   });
@@ -751,6 +1226,15 @@ function getLabel_(name) {
   var label = GmailApp.getUserLabelByName(name);
   if (!label) label = GmailApp.createLabel(name);
   return label;
+}
+
+/**
+ * Gmail search terms for nested labels.
+ * UI name is "inbox-bot/faq" but search uses "label:inbox-bot-faq"
+ * (slash → hyphen). Using "/" breaks -label: exclusions too.
+ */
+function gmailLabelTerm_(name) {
+  return 'label:' + String(name || '').replace(/\//g, '-');
 }
 
 function hasLabel_(thread, name) {
@@ -768,44 +1252,183 @@ function dealFollowUpEnabled_() {
 }
 
 /**
- * Hourly: FAQ/customer threads where we replied last and they went quiet → one deal mail.
+ * Hourly: quiet FAQ/customer threads (and pitch declines that never got a deal) → one deal mail.
+ * Uses Label.getThreads() — Gmail search for nested labels (slash or hyphen) is unreliable.
  */
 function dealFollowUpSweep() {
+  EMAILS_SENT_THIS_RUN_ = 0;
   if (!dealFollowUpEnabled_()) {
     Logger.log('dealFollowUpSweep: DEAL_FOLLOWUP_ENABLED is not true — skip');
     return;
   }
+  if (!canSendEmail_(1)) {
+    Logger.log(
+      'dealFollowUpSweep aborted: email quota low remaining=' + emailQuotaRemaining_()
+    );
+    return;
+  }
   ensureLabels_();
   var dry = String(props_().getProperty('DRY_RUN') || 'false').toLowerCase() === 'true';
-  var hours = Number(props_().getProperty('DEAL_FOLLOWUP_IDLE_HOURS') || '48');
-  if (!(hours > 0)) hours = 48;
+  var hours = dealIdleHours_();
   var idleMs = hours * 60 * 60 * 1000;
-  var q =
-    '(label:' +
-    LABEL_FAQ +
-    ' OR label:' +
-    LABEL_CUSTOMER +
-    ') -label:' +
-    LABEL_DEAL +
-    ' -label:' +
-    LABEL_DEAD +
-    ' -label:' +
-    LABEL_PITCH +
-    ' newer_than:21d';
-  var threads = GmailApp.search(q, 0, 40);
+  var maxAgeMs = 21 * 24 * 60 * 60 * 1000;
   var now = Date.now();
-  threads.forEach(function (thread) {
-    var messages = thread.getMessages();
-    if (!messages.length) return;
-    var last = messages[messages.length - 1];
-    if (!isFromUs_(last.getFrom())) return;
-    if (now - last.getDate().getTime() < idleMs) return;
+  var maxSends = Number(props_().getProperty('EMAIL_PER_RUN_MAX') || '5');
+  if (!(maxSends > 0)) maxSends = 5;
+
+  var threads = collectDealSweepThreads_(50);
+  Logger.log(
+    'dealFollowUpSweep: pool=' +
+      threads.length +
+      ' idleHours=' +
+      hours +
+      ' dry=' +
+      dry
+  );
+
+  var sent = 0;
+  var skipped = 0;
+  for (var i = 0; i < threads.length; i++) {
+    if (sent >= maxSends || !canSendEmail_(1)) {
+      Logger.log('dealFollowUpSweep: stop early (quota/run max)');
+      break;
+    }
+    var thread = threads[i];
+    var why = dealSweepSkipReason_(thread, now, idleMs, maxAgeMs);
+    if (why) {
+      skipped++;
+      Logger.log('dealFollowUpSweep skip thread=' + thread.getId() + ' reason=' + why);
+      continue;
+    }
+    var isPitch = hasLabel_(thread, LABEL_PITCH);
     if (dry) {
-      Logger.log('DRY_RUN idle deal candidate thread=' + thread.getId());
+      Logger.log(
+        'DRY_RUN idle deal candidate thread=' +
+          thread.getId() +
+          ' pitch=' +
+          isPitch +
+          ' faq=' +
+          hasLabel_(thread, LABEL_FAQ) +
+          ' customer=' +
+          hasLabel_(thread, LABEL_CUSTOMER)
+      );
+      continue;
+    }
+    var messages = thread.getMessages();
+    var last = messages[messages.length - 1];
+    var reason = isPitch ? 'pitch' : 'idle';
+    try {
+      if (maybeSendDealFollowUp_(thread, last, reason)) sent++;
+      else {
+        skipped++;
+        Logger.log('dealFollowUpSweep send-failed/skipped thread=' + thread.getId());
+      }
+    } catch (e) {
+      skipped++;
+      Logger.log('dealFollowUpSweep error thread=' + thread.getId() + ' ' + e);
+      if (String(e).indexOf('EmailQuota') !== -1) break;
+    }
+  }
+  Logger.log('dealFollowUpSweep done sent=' + sent + ' skipped=' + skipped);
+}
+
+/** Manual: log every FAQ/customer/pitch thread and why it would/wouldn't get a deal. */
+function dealFollowUpDebug() {
+  ensureLabels_();
+  var hours = dealIdleHours_();
+  var idleMs = hours * 60 * 60 * 1000;
+  var maxAgeMs = 21 * 24 * 60 * 60 * 1000;
+  var now = Date.now();
+  Logger.log(
+    'dealFollowUpDebug enabled=' +
+      dealFollowUpEnabled_() +
+      ' idleHours=' +
+      hours +
+      ' dry=' +
+      String(props_().getProperty('DRY_RUN') || 'false')
+  );
+  var threads = collectDealSweepThreads_(50);
+  Logger.log('dealFollowUpDebug pool=' + threads.length);
+  threads.forEach(function (thread) {
+    var why = dealSweepSkipReason_(thread, now, idleMs, maxAgeMs);
+    var msgs = thread.getMessages();
+    var last = msgs.length ? msgs[msgs.length - 1] : null;
+    Logger.log(
+      'thread=' +
+        thread.getId() +
+        ' faq=' +
+        hasLabel_(thread, LABEL_FAQ) +
+        ' customer=' +
+        hasLabel_(thread, LABEL_CUSTOMER) +
+        ' pitch=' +
+        hasLabel_(thread, LABEL_PITCH) +
+        ' deal=' +
+        dealAlreadySent_(thread) +
+        ' dead=' +
+        isDead_(thread) +
+        ' lastFrom=' +
+        (last ? last.getFrom() : '') +
+        ' lastAgeH=' +
+        (last ? ((now - last.getDate().getTime()) / 3600000).toFixed(1) : 'n/a') +
+        ' → ' +
+        (why || 'WOULD_SEND')
+    );
+  });
+}
+
+function dealIdleHours_() {
+  var raw = props_().getProperty('DEAL_FOLLOWUP_IDLE_HOURS');
+  if (raw === null || raw === '') return 24;
+  var hours = Number(raw);
+  // Allow 0 = send on next sweep once we replied last (no quiet wait).
+  if (isNaN(hours) || hours < 0) return 24;
+  return hours;
+}
+
+/**
+ * Prefer Label.getThreads over Gmail search — nested names like inbox-bot/faq
+ * often return 0 hits via label: queries.
+ */
+function collectDealSweepThreads_(maxPerLabel) {
+  var n = maxPerLabel || 50;
+  var seen = {};
+  var out = [];
+  [LABEL_FAQ, LABEL_CUSTOMER, LABEL_PITCH].forEach(function (name) {
+    var label = GmailApp.getUserLabelByName(name);
+    if (!label) {
+      Logger.log('collectDealSweepThreads_: no label ' + name);
       return;
     }
-    maybeSendDealFollowUp_(thread, last, 'idle');
+    var threads = label.getThreads(0, n);
+    Logger.log('collectDealSweepThreads_: ' + name + ' → ' + threads.length);
+    threads.forEach(function (thread) {
+      var id = thread.getId();
+      if (seen[id]) return;
+      seen[id] = true;
+      out.push(thread);
+    });
   });
+  return out;
+}
+
+/** @return {string|null} skip reason, or null if eligible */
+function dealSweepSkipReason_(thread, now, idleMs, maxAgeMs) {
+  var messages = thread.getMessages();
+  if (!messages.length) return 'empty';
+  var last = messages[messages.length - 1];
+  var age = now - last.getDate().getTime();
+  if (age > maxAgeMs) return 'older_than_21d';
+  if (!isFromUs_(last.getFrom())) return 'last_not_from_us:' + last.getFrom();
+  var isPitch = hasLabel_(thread, LABEL_PITCH);
+  if (!isPitch && age < idleMs) {
+    return 'idle_wait_' + (idleMs / 3600000) + 'h (age=' + (age / 3600000).toFixed(1) + 'h)';
+  }
+  if (isDead_(thread) && !isPitch) return 'dead';
+  if (dealAlreadySent_(thread)) return 'already_dealt';
+  if (!hasLabel_(thread, LABEL_FAQ) && !hasLabel_(thread, LABEL_CUSTOMER) && !isPitch) {
+    return 'no_faq_customer_pitch_label';
+  }
+  return null;
 }
 
 function isClosingThanks_(subject, body) {
@@ -871,22 +1494,118 @@ function engagedForDeal_(thread) {
 }
 
 function maybeSendDealFollowUp_(thread, msg, reason) {
-  if (!dealFollowUpEnabled_()) return false;
-  if (hasLabel_(thread, LABEL_DEAL)) return false;
-  if (isDead_(thread)) return false;
-  // Pitch threads only get a deal when reason is explicitly 'pitch'
-  if (hasLabel_(thread, LABEL_PITCH) && reason !== 'pitch') return false;
-  if (!engagedForDeal_(thread) && reason !== 'idle' && reason !== 'pitch') {
-    Logger.log('Skip deal follow-up (not engaged): ' + thread.getId());
+  // One deal per thread forever — claim under lock *before* send.
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    Logger.log('Deal follow-up lock timeout: ' + e);
     return false;
   }
   try {
-    sendDealFollowUp_(thread, msg, reason);
-    return true;
-  } catch (e) {
-    Logger.log('Deal follow-up failed: ' + e);
+    return maybeSendDealFollowUpUnlocked_(thread, msg, reason);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Deal send without acquiring LockService (caller must already hold the script lock,
+ * e.g. triageThreadLocked_). Sweep should call maybeSendDealFollowUp_ instead.
+ */
+function maybeSendDealFollowUpUnlocked_(thread, msg, reason) {
+  if (!dealFollowUpEnabled_()) return false;
+  if (dealAlreadySent_(thread)) return false;
+  if (threadLooksLikeDealAlreadySent_(thread)) {
+    markDealSent_(thread, reason);
+    Logger.log('Deal already present in thread history — claimed, skip send: ' + thread.getId());
     return false;
   }
+  // Pitch declines are marked dead on purpose; still allow pitch/idle deal send.
+  if (isDead_(thread) && !(hasLabel_(thread, LABEL_PITCH) && (reason === 'pitch' || reason === 'idle'))) {
+    return false;
+  }
+  // Pitch threads only get a deal when reason is pitch (or idle retry after decline).
+  if (hasLabel_(thread, LABEL_PITCH) && reason !== 'pitch' && reason !== 'idle') return false;
+  if (
+    !engagedForDeal_(thread) &&
+    reason !== 'idle' &&
+    reason !== 'pitch' &&
+    reason !== 'discount'
+  ) {
+    Logger.log('Skip deal follow-up (not engaged): ' + thread.getId());
+    return false;
+  }
+
+  if (!canSendEmail_(1)) {
+    Logger.log('Deal follow-up deferred — email quota low');
+    return false;
+  }
+  var sendReason = hasLabel_(thread, LABEL_PITCH) ? 'pitch' : reason;
+  markDealSent_(thread, sendReason);
+  try {
+    sendDealFollowUp_(thread, msg, sendReason);
+    return true;
+  } catch (e) {
+    Logger.log('Deal follow-up failed — clearing claim for retry: ' + e);
+    clearDealSent_(thread);
+    if (String(e).indexOf('EmailQuota') !== -1) throw e;
+    return false;
+  }
+}
+
+function dealSentPropKey_(thread) {
+  return 'dealSent:' + thread.getId();
+}
+
+/** True if this Gmail thread already got a deal (label and/or Script Property). */
+function dealAlreadySent_(thread) {
+  if (hasLabel_(thread, LABEL_DEAL)) {
+    // Keep prop in sync so label removal alone cannot unlock a second send.
+    props_().setProperty(dealSentPropKey_(thread), '1');
+    return true;
+  }
+  if (props_().getProperty(dealSentPropKey_(thread)) === '1') {
+    thread.addLabel(getLabel_(LABEL_DEAL));
+    Logger.log('Healed missing ' + LABEL_DEAL + ' on thread ' + thread.getId());
+    return true;
+  }
+  return false;
+}
+
+/** Heuristic: prior outbound already contains the volume-deal creative. */
+function threadLooksLikeDealAlreadySent_(thread) {
+  var messages = thread.getMessages();
+  var start = Math.max(0, messages.length - 8);
+  for (var i = start; i < messages.length; i++) {
+    var m = messages[i];
+    if (!isFromUs_(m.getFrom())) continue;
+    var blob = (
+      String(m.getPlainBody() || '') +
+      ' ' +
+      String(m.getBody() || '')
+    ).toLowerCase();
+    if (blob.indexOf('buy more, save more') !== -1) return true;
+    if (blob.indexOf('buy-more-save-more') !== -1) return true;
+    if (
+      blob.indexOf('4 or more') !== -1 &&
+      blob.indexOf('25%') !== -1 &&
+      blob.indexOf('gan') !== -1
+    ) {
+      return true;
+    }
+    if (blob.indexOf('120w gan charger with retractable') !== -1) return true;
+  }
+  return false;
+}
+
+function markDealSent_(thread, reason) {
+  thread.addLabel(getLabel_(LABEL_DEAL));
+  // Discount asks are still an active shopper thread — don't mark closed.
+  if (String(reason || '') !== 'discount') {
+    thread.addLabel(getLabel_(LABEL_CLOSE));
+  }
+  props_().setProperty(dealSentPropKey_(thread), '1');
 }
 
 function sendDealFollowUp_(thread, msg, reason) {
@@ -898,17 +1617,19 @@ function sendDealFollowUp_(thread, msg, reason) {
   // Prefer From hello@ when Send-as works; fall back to replyTo.
   try {
     opts.from = hello;
-    thread.reply(mail.plain, opts);
+    safeThreadReply_(thread, mail.plain, opts);
   } catch (e) {
+    if (String(e).indexOf('EmailQuota') !== -1) throw e;
     Logger.log('Deal follow-up from: failed (' + e + '); retry with replyTo');
     delete opts.from;
     opts.replyTo = hello;
-    thread.reply(mail.plain, opts);
+    safeThreadReply_(thread, mail.plain, opts);
   }
 
-  thread.addLabel(getLabel_(LABEL_DEAL));
-  thread.addLabel(getLabel_(LABEL_CLOSE));
-  thread.moveToArchive();
+  // Keep discount replies visible in inbox; archive closed/pitch/idle deals.
+  if (String(reason || '') !== 'discount') {
+    thread.moveToArchive();
+  }
   Logger.log(
     'Deal follow-up sent (' +
       reason +
@@ -1010,6 +1731,11 @@ function dealFollowUpCopy_(reason) {
     intro =
       props_().getProperty('DEAL_INTRO_IDLE') ||
       'Just a quick follow-up from Our Tech Accessories. Here is a current deal from the shop in case it is useful.';
+  } else if (r === 'discount') {
+    intro =
+      props_().getProperty('DEAL_INTRO_DISCOUNT') ||
+      'Site prices are the normal single-item prices. We do not usually discount one-off, ' +
+        'but we do have a current volume deal if you want more than one charger.';
   } else {
     // close (default)
     intro =
@@ -1040,19 +1766,87 @@ function guessFirstName_(from) {
 }
 
 function loadDealPlain_() {
-  var driveId = props_().getProperty('DEAL_PLAIN_DRIVE_ID');
-  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
   var inline = props_().getProperty('DEAL_PLAIN');
   if (inline) return inline;
+  var driveId = props_().getProperty('DEAL_PLAIN_DRIVE_ID');
+  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
+  try {
+    return fetchDealBodies_().plain;
+  } catch (e) {
+    Logger.log('Deal plain from website failed: ' + e);
+  }
   if (typeof defaultDealPlain_ === 'function') return defaultDealPlain_();
-  throw new Error('No deal plain body — paste DealFollowupBodies.gs or set DEAL_PLAIN');
+  throw new Error('No deal plain body — set DEAL_BODIES_URL or paste DealFollowupBodies.gs');
 }
 
 function loadDealHtml_() {
-  var driveId = props_().getProperty('DEAL_HTML_DRIVE_ID');
-  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
   var inline = props_().getProperty('DEAL_HTML');
   if (inline) return inline;
+  var driveId = props_().getProperty('DEAL_HTML_DRIVE_ID');
+  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
+  try {
+    return fetchDealBodies_().html;
+  } catch (e) {
+    Logger.log('Deal HTML from website failed: ' + e);
+  }
   if (typeof defaultDealHtml_ === 'function') return defaultDealHtml_();
-  throw new Error('No deal HTML body — paste DealFollowupBodies.gs or set DEAL_HTML');
+  throw new Error('No deal HTML body — set DEAL_BODIES_URL or paste DealFollowupBodies.gs');
+}
+
+/**
+ * GET DEAL_BODIES_URL (default /pages/inbox-deal) → { html, plain, version }.
+ * Cached 10 minutes in ScriptCache.
+ */
+function fetchDealBodies_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('dealBodiesJson');
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      /* refetch */
+    }
+  }
+  var url =
+    props_().getProperty('DEAL_BODIES_URL') ||
+    'https://ourtechaccessories.com/pages/inbox-deal';
+  var resp = UrlFetchApp.fetch(url, {
+    muteHttpExceptions: true,
+    followRedirects: true,
+    headers: { Accept: 'application/json, text/plain, */*' }
+  });
+  var code = resp.getResponseCode();
+  var text = String(resp.getContentText() || '').trim();
+  if (code < 200 || code >= 300) {
+    throw new Error('DEAL_BODIES_URL HTTP ' + code + ' body=' + text.slice(0, 200));
+  }
+  if (text.charAt(0) !== '{') {
+    var m = text.match(/\{[\s\S]*"html"[\s\S]*\}/);
+    if (m) text = m[0];
+  }
+  var data = JSON.parse(text);
+  if (!data || !data.html || !data.plain) {
+    throw new Error('DEAL_BODIES_URL JSON missing html/plain');
+  }
+  try {
+    cache.put('dealBodiesJson', JSON.stringify(data), 600);
+  } catch (e2) {
+    /* cache optional */
+  }
+  Logger.log('Fetched deal bodies version=' + (data.version || '') + ' from ' + url);
+  return data;
+}
+
+/** Manual: clear cached deal JSON + fetch once (log version). */
+function refreshDealBodiesCache() {
+  CacheService.getScriptCache().remove('dealBodiesJson');
+  var data = fetchDealBodies_();
+  Logger.log(
+    'Deal bodies refreshed version=' +
+      (data.version || '') +
+      ' htmlChars=' +
+      String(data.html).length +
+      ' plainChars=' +
+      String(data.plain).length
+  );
 }

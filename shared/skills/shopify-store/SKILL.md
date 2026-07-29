@@ -173,6 +173,19 @@ If `themeFilesUpsert` returns a permissions/exemption error:
 1. Request theme API access in Partner/Dev Dashboard if eligible, **or**
 2. Set `SHOPIFY_THEME_ACCESS_PASSWORD` and run `bash scripts/theme_push.sh --path <delta-dir>`
 
+## Related — store inbox deal page
+
+The store-inbox Apps Script loads deal follow-up HTML/plain from the live page **`/pages/inbox-deal`** (JSON via `templates/page.inbox-deal.liquid`).
+
+When editing deal email copy:
+
+1. Edit `shared/skills/store-inbox/apps-script/templates/deal-followup.{html,txt}`
+2. Run `python3 shared/skills/store-inbox/scripts/build-inbox-deal-page.py`
+3. Upsert `templates/page.inbox-deal.liquid` on the MAIN theme + keep page handle `inbox-deal` / `templateSuffix: inbox-deal`
+4. Tell the user to run `refreshDealBodiesCache` in Apps Script (or wait ~10m)
+
+Full guide: [`../store-inbox/SKILL.md`](../store-inbox/SKILL.md).
+
 ## Logging
 
 Append significant storefront changes to local `MASTER_CONTEXT.md` Changelog (dated). Do not commit `.env` or `outputs/`.

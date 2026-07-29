@@ -53,6 +53,8 @@ Snapshots write to `outputs/profit-admin/snapshots/` (`latest.json` + timestampe
 | `GET` | `/api/snapshots` | List snapshot ids |
 | `GET` | `/api/snapshot/{id}` | One snapshot |
 
+Snapshot includes `pnl`, `unit_economics` (list-price theory), and `product_pnl` (actual sold-unit contribution by product, with variant + order dig-in).
+
 **Do not expose this server publicly in v1** — there is no auth yet (`auth.py` is a Phase 2 stub).
 
 ## P&L math
@@ -60,6 +62,12 @@ Snapshots write to `outputs/profit-admin/snapshots/` (`latest.json` + timestampe
 Per day:
 
 `P&L = revenue − landed COGS − checkout fees − Meta spend − KIE (£) − Shopify Basic/31`
+
+Per product (`product_pnl`):
+
+`Contribution = line revenue − landed COGS − allocated checkout fees`
+
+Checkout fees are split across line items by revenue share within the order. Meta and KIE are **not** attributed per SKU in v1.
 
 - Landed COGS prefers Shopify **Cost per item** (`unitCost`); falls back to known CJ-derived GBP for OTA SKU prefixes; else £3/unit estimate.
 - Fees default to Shopify Payments Basic UK: **1.5% + £0.25** (`PROFIT_FEE_PCT` / `PROFIT_FEE_FIXED_GBP`).

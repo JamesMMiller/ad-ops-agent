@@ -524,43 +524,37 @@ def upsert_page(
     body_html: str,
     page_id: str | None = None,
     is_published: bool = True,
+    template_suffix: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
+    page_input: dict[str, Any] = {
+        "title": title,
+        "handle": handle,
+        "body": body_html,
+        "isPublished": is_published,
+    }
+    if template_suffix is not None:
+        page_input["templateSuffix"] = template_suffix
     if page_id:
         q = """
         mutation pageUpdate($id: ID!, $page: PageUpdateInput!) {
           pageUpdate(id: $id, page: $page) {
-            page { id title handle }
+            page { id title handle templateSuffix isPublished }
             userErrors { field message }
           }
         }
         """
-        variables = {
-            "id": page_id,
-            "page": {
-                "title": title,
-                "handle": handle,
-                "body": body_html,
-                "isPublished": is_published,
-            },
-        }
+        variables = {"id": page_id, "page": page_input}
     else:
         q = """
         mutation pageCreate($page: PageCreateInput!) {
           pageCreate(page: $page) {
-            page { id title handle }
+            page { id title handle templateSuffix isPublished }
             userErrors { field message }
           }
         }
         """
-        variables = {
-            "page": {
-                "title": title,
-                "handle": handle,
-                "body": body_html,
-                "isPublished": is_published,
-            },
-        }
+        variables = {"page": page_input}
     return graphql(q, variables, dry_run=dry_run)
 
 
