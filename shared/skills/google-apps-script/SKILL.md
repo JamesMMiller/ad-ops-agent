@@ -18,7 +18,7 @@ Domain bots (e.g. store inbox triage) stay in their own skills; this skill is th
 | Need | Skill |
 |------|--------|
 | Generic Gmail/Sheets automation, one-shot send, triggers, properties | **this skill** |
-| Store `hello@` triage / ImprovMX / FAQ bot | `store-inbox` |
+| Store `hello@` triage / ImprovMX / FAQ / DEAL / `/pages/inbox-deal` bodies | `store-inbox` |
 
 ## Hard rules
 

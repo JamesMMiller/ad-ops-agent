@@ -307,7 +307,9 @@ Always upsert a **Hashnode draft** first; publish only with an explicit yes. Exa
 
 ### Step 12 — Store inbox (`hello@` + triage bot)
 
-Public contact should be **`hello@ourtechaccessories.com`**, not personal Gmail. Mail forwards into the store Gmail; an Apps Script LLM declines sales pitches and emails you only for genuine customers. You reply **From: hello@**.
+Public contact should be **`hello@ourtechaccessories.com`**, not personal Gmail. Mail forwards into the store Gmail; an Apps Script LLM declines sales pitches, answers simple FAQ / discount asks, and emails you only for genuine customers. You reply **From: hello@**.
+
+Deal HTML/plain for follow-ups come from the live storefront endpoint **`https://ourtechaccessories.com/pages/inbox-deal`** (JSON). Edit templates under `shared/skills/store-inbox/apps-script/templates/`, rebuild with `build-inbox-deal-page.py`, push `page.inbox-deal.liquid` via the Shopify skill.
 
 Full guide: [`shared/skills/store-inbox/SKILL.md`](shared/skills/store-inbox/SKILL.md).
 
@@ -325,7 +327,7 @@ Full guide: [`shared/skills/store-inbox/SKILL.md`](shared/skills/store-inbox/SKI
 | `shared/skills/pixar-style-ad/` · `claymation-ad/` · `caption-video/` | Multi-step creative pipelines |
 | `shared/skills/shopify-store/` | Shopify Admin API — products, pages, theme files (`tech-accessory`, `bulk-pack`) |
 | `shared/skills/blog-writing/` | Journey blog voice + Hashnode draft/publish CLI |
-| `shared/skills/store-inbox/` | `hello@ourtechaccessories.com` + Gmail Apps Script triage |
+| `shared/skills/store-inbox/` | `hello@` + Gmail triage; deal bodies from `/pages/inbox-deal` |
 | `shared/skills/google-apps-script/` | Generic Apps Script authoring (Gmail/Sheets, identity, triggers) |
 | `blog/` | Committed post source (`blog/posts/<date>-<slug>/`) |
 | `shared/skills/meta-ad-builder/` | Meta Marketing API publish (PAUSED) |

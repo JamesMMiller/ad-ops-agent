@@ -213,3 +213,171 @@ def build_unit_economics(shopify: dict[str, Any] | None) -> list[dict[str, Any]]
             "max_cpa": round(contrib, 2) if contrib > 0 else None,
         }
     return sorted(by_handle.values(), key=lambda r: r.get("min_roas") or 999)
+
+
+def _short_product_name(title: str, handle: str | None = None) -> str:
+    """Compact label for tables / charts."""
+    known = {
+        "120w-gan-fast-charger-with-a-built-in-retractable-cable": "120W GaN retractable",
+        "folding-hanging-neck-electric-fan": "Neck fan",
+        "foldable-magnetic-vacuum-car-phone-holder-foldable-suction-cup-with-suction-cup-hands-free-navigation-for-smart-phone": "Vacuum phone mount",
+        "universal-travel-adapter-worldwide-plug-uk-eu-au-us-with-usb-c-port-fast-charger": "Travel adapter",
+    }
+    if handle and handle in known:
+        return known[handle]
+    t = (title or "").strip()
+    if "GaN" in t or "gan" in (handle or ""):
+        return "120W GaN retractable"
+    if "Neck" in t or "neck-fan" in (handle or ""):
+        return "Neck fan"
+    if "Vacuum" in t or "vacuum" in (handle or ""):
+        return "Vacuum phone mount"
+    if "Travel" in t or "adapter" in (handle or ""):
+        return "Travel adapter"
+    if "Cleaner" in t or "cleaner" in (handle or ""):
+        return "Screen cleaner"
+    return t if len(t) <= 42 else t[:39] + "…"
+
+
+def build_product_pnl(shopify: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Actual sold-unit profitability by product (pre Meta / KIE attribution)."""
+    if not shopify:
+        return []
+
+    fee_p = fee_pct()
+    fee_f = fee_fixed_gbp()
+    cost_by_sku: dict[str, float] = dict(shopify.get("cost_by_sku") or {})
+
+    sku_meta: dict[str, dict[str, Any]] = {}
+    for row in shopify.get("catalog") or []:
+        sku = (row.get("sku") or "").strip()
+        if sku and sku not in sku_meta:
+            sku_meta[sku] = row
+
+    # key → aggregates
+    products: dict[str, dict[str, Any]] = {}
+
+    def bucket_for(sku: str, title: str) -> dict[str, Any]:
+        meta = sku_meta.get(sku) or {}
+        handle = meta.get("handle") or None
+        key = handle or title or sku or "unknown"
+        if key not in products:
+            products[key] = {
+                "key": key,
+                "product": _short_product_name(meta.get("product") or title, handle),
+                "title": meta.get("product") or title,
+                "handle": handle,
+                "units": 0,
+                "order_names": set(),
+                "revenue": 0.0,
+                "cogs": 0.0,
+                "fees": 0.0,
+                "variants": {},  # sku → agg
+                "order_lines": [],  # dig-in rows
+            }
+        return products[key]
+
+    for o in shopify.get("orders") or []:
+        items = list(o.get("items") or [])
+        if not items:
+            continue
+        line_revs = [float(it.get("unit") or 0) * int(it.get("qty") or 0) for it in items]
+        sub = sum(line_revs) or 1.0
+        order_fee = float(o.get("total") or 0) * fee_p + fee_f
+        for it, line_rev in zip(items, line_revs):
+            sku = (it.get("sku") or "").strip()
+            title = it.get("title") or "Unknown"
+            qty = int(it.get("qty") or 0)
+            if qty <= 0:
+                continue
+            cogs = _landed_for_sku(sku, qty, cost_by_sku)
+            fee_share = order_fee * (line_rev / sub)
+            b = bucket_for(sku, title)
+            b["units"] += qty
+            b["order_names"].add(o.get("name") or o.get("date") or "")
+            b["revenue"] += line_rev
+            b["cogs"] += cogs
+            b["fees"] += fee_share
+
+            meta = sku_meta.get(sku) or {}
+            vkey = sku or title
+            variants = b["variants"]
+            if vkey not in variants:
+                variants[vkey] = {
+                    "sku": sku or "—",
+                    "variant": meta.get("variant") or "—",
+                    "units": 0,
+                    "revenue": 0.0,
+                    "cogs": 0.0,
+                    "fees": 0.0,
+                }
+            variants[vkey]["units"] += qty
+            variants[vkey]["revenue"] += line_rev
+            variants[vkey]["cogs"] += cogs
+            variants[vkey]["fees"] += fee_share
+
+            b["order_lines"].append(
+                {
+                    "order": o.get("name"),
+                    "date": o.get("date"),
+                    "sku": sku or "—",
+                    "variant": meta.get("variant") or "—",
+                    "qty": qty,
+                    "unit": round(float(it.get("unit") or 0), 2),
+                    "revenue": round(line_rev, 2),
+                    "cogs": round(cogs, 2),
+                    "fees": round(fee_share, 2),
+                    "contrib": round(line_rev - cogs - fee_share, 2),
+                }
+            )
+
+    rows: list[dict[str, Any]] = []
+    for b in products.values():
+        rev = b["revenue"]
+        cogs = b["cogs"]
+        fees = b["fees"]
+        contrib = rev - cogs - fees
+        margin = contrib / rev if rev else 0.0
+        units = b["units"]
+        variant_rows = []
+        for v in b["variants"].values():
+            v_contrib = v["revenue"] - v["cogs"] - v["fees"]
+            variant_rows.append(
+                {
+                    "sku": v["sku"],
+                    "variant": v["variant"],
+                    "units": v["units"],
+                    "revenue": round(v["revenue"], 2),
+                    "cogs": round(v["cogs"], 2),
+                    "fees": round(v["fees"], 2),
+                    "contrib": round(v_contrib, 2),
+                    "margin": round(v_contrib / v["revenue"], 3) if v["revenue"] else 0.0,
+                    "avg_unit": round(v["revenue"] / v["units"], 2) if v["units"] else 0.0,
+                }
+            )
+        variant_rows.sort(key=lambda r: r["revenue"], reverse=True)
+        order_lines = sorted(
+            b["order_lines"],
+            key=lambda r: (r.get("date") or "", r.get("order") or ""),
+            reverse=True,
+        )
+        rows.append(
+            {
+                "key": b["key"],
+                "product": b["product"],
+                "title": b["title"],
+                "handle": b["handle"],
+                "units": units,
+                "orders": len({n for n in b["order_names"] if n}),
+                "revenue": round(rev, 2),
+                "cogs": round(cogs, 2),
+                "fees": round(fees, 2),
+                "contrib": round(contrib, 2),
+                "margin": round(margin, 3),
+                "avg_unit": round(rev / units, 2) if units else 0.0,
+                "variants": variant_rows,
+                "order_lines": order_lines,
+            }
+        )
+
+    return sorted(rows, key=lambda r: r["contrib"], reverse=True)

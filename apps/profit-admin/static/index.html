@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Our Tech — Profit Admin</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=2" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   </head>
   <body>
@@ -69,6 +69,41 @@
       </section>
 
       <section class="card">
+        <h2 id="product-pnl-heading">Product profitability</h2>
+        <p class="muted footnote" id="product-pnl-note">
+          Sold units only. Contribution = line revenue − landed COGS − checkout fees
+          allocated by line share. Meta ads and KIE are not attributed per product.
+          Click a row for variants and orders.
+        </p>
+        <div class="table-wrap">
+          <table id="product-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Orders</th>
+                <th>Units</th>
+                <th>Revenue</th>
+                <th>COGS</th>
+                <th>Fees</th>
+                <th>Contrib</th>
+                <th>Margin</th>
+                <th>Avg £</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="product-layout">
+          <div class="product-main">
+            <canvas id="product-chart" height="90"></canvas>
+          </div>
+          <aside class="product-detail" id="product-detail">
+            <p class="muted">Select a product row to dig into variants and orders.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>Unit economics (ACTIVE SKUs)</h2>
         <div class="table-wrap">
           <table id="unit-table">
@@ -93,6 +128,6 @@
         Shopify Basic amortised. Secrets stay on the server. Phase 2: embed in Shopify Admin via App Bridge.
       </footer>
     </div>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
   </body>
 </html>

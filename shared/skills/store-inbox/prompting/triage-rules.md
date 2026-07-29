@@ -6,13 +6,17 @@ Classifier labels (LLM returns exactly one):
 |-------|--------|
 | `PITCH` | Auto-decline from hello@; label `inbox-bot/pitch`; archive |
 | `FAQ` | Auto-reply from store knowledge; label `inbox-bot/faq` |
+| `DEAL` | Discount / best / last price / coupon ask → reply with the **volume deal** (HTML when enabled); do not escalate |
 | `CUSTOMER` | Escalate to personal; label `inbox-bot/customer` |
 | `UNCLEAR` | Escalate (same as customer); label `inbox-bot/unclear` |
 | `TRANSACTIONAL` | No bot action (Shopify, Google, banks, 2FA) |
-| `IGNORE` | Newsletter / bulk; archive, no reply |
+| `IGNORE` | Clear newsletter / bulk only; archive, no reply. Prefer `PITCH` (decline+deal) or `UNCLEAR` when a person wrote |
 | `BOT` | Clear autoresponder/chatbot → `inbox-bot/dead`, archive, no reply |
 | `CLOSE` | Thanks / thread wrapping up → optional **deal follow-up** (once); see [deal-followup.md](deal-followup.md) |
 | *(dead)* | Label `inbox-bot/dead` — no further bot actions |
+| *(rescued)* | Label `inbox-bot/rescued-from-spam` — moved from Gmail Spam → Inbox for triage |
+
+**Spam policy:** the bot **never** moves mail into Gmail Spam. Each triage run rescues human-looking threads from Spam into Inbox, then replies (FAQ / DEAL / decline+deal / escalate) as usual. Clear noreply bots and bulk newsletters stay in Spam.
 
 Store knowledge: **[store-faq.md](store-faq.md)** (also Script property `STORE_FAQ`).
 
@@ -48,6 +52,17 @@ Answerable from store knowledge only (no order lookup):
 - Rough delivery times (general)
 - Contact / who is this store
 
+## DEAL (discount / price) — examples
+
+Reply directly with the current volume deal (same GaN HTML when `DEAL_FOLLOWUP_ENABLED=true`). Do **not** escalate.
+
+- “Is this your last price or you got a discount?”
+- “Any discount / coupon / promo?”
+- “Can you do better on the price?”
+- “Best price?” / “any deals?”
+
+Facts: site prices are normal single-item prices; current offer is buy-more-save-more on the 120W GaN charger (2=15%, 3=20%, 4+=25%). No invented one-off coupons. One deal HTML per thread; if already sent, short plain reminder only.
+
 Default facts today: **UK shipping only**; international planned later with **no promised date**.  
 Shipping cost: **some products free UK shipping**, others a fee at checkout — never claim always free or always charged.  
 Inbox confirm: yes, `hello@` is the official store customer email; do not share personal contact details. If that line is only a pitch opener, classify as **PITCH**.  
@@ -73,13 +88,14 @@ The bot tracks a **per-thread watermark** (last handled message time), not “pr
 
 ## Closed-thread deal follow-up
 
-Optional (`DEAL_FOLLOWUP_ENABLED=true`). Sends the GaN-style deal HTML **once** when:
+Optional (`DEAL_FOLLOWUP_ENABLED=true`). Sends the GaN-style deal HTML **once** (bodies from **`https://ourtechaccessories.com/pages/inbox-deal`**) when:
 
 1. Customer closes the thread with thanks (and we already helped), or
-2. After a **pitch auto-decline** (decline first, then deal), or
-3. Idle sweep: we replied last on an FAQ/customer thread and they stayed quiet for N hours.
+2. After a **pitch** (one deal email with pitch intro when enabled; plain decline only if deal is off), or
+3. Idle sweep: we replied last on an FAQ/customer thread and they stayed quiet for N hours (also retries pitch declines that never got a deal).
+4. Customer asks for a **discount / last price** (`DEAL` label).
 
-Details: **[deal-followup.md](deal-followup.md)**.
+Details: **[deal-followup.md](deal-followup.md)** (website endpoint + Apps Script cache).
 
 ## Never auto-decline if
 

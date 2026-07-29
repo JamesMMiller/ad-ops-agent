@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from auth import AuthDep
 from config import kie_log_path, port, repo_root
+from pnl import build_product_pnl
 from refresh import run_refresh
 from snapshots import list_snapshots, read_latest, read_snapshot
 
@@ -27,6 +28,18 @@ STATIC = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="Our Tech Profit Admin", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
+
+
+def _with_product_pnl(payload: dict) -> dict:
+    """Backfill product dig-in for snapshots saved before this field existed."""
+    if payload.get("product_pnl") is not None:
+        return payload
+    shopify = (payload.get("sources") or {}).get("shopify")
+    if shopify:
+        payload = {**payload, "product_pnl": build_product_pnl(shopify)}
+    else:
+        payload = {**payload, "product_pnl": []}
+    return payload
 
 
 @app.get("/")
@@ -75,7 +88,7 @@ def snapshot_latest(_auth: AuthDep) -> dict:
     latest = read_latest()
     if not latest:
         raise HTTPException(status_code=404, detail="No snapshot yet — hit Refresh")
-    return latest
+    return _with_product_pnl(latest)
 
 
 @app.get("/api/snapshots")
@@ -88,4 +101,4 @@ def snapshot_one(snapshot_id: str, _auth: AuthDep) -> dict:
     snap = read_snapshot(snapshot_id)
     if not snap:
         raise HTTPException(status_code=404, detail="Snapshot not found")
-    return snap
+    return _with_product_pnl(snap)

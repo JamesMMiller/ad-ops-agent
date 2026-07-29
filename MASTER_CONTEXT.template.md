@@ -81,6 +81,8 @@ Used by **`shopify-store`** (`shared/skills/shopify-store/`) — updates product
 - **Primary product handle(s)** (campaign URL locks): _(fill locally — never commit secrets)_
 - **Local project dirs:** `outputs/shopify/projects/<name>/` (gitignored)
 - **Main theme ID** (`SHOPIFY_THEME_ID` in `.env` or record GID here after `list-themes`):
+- **Public contact:** `hello@ourtechaccessories.com` — see `shared/skills/store-inbox/`
+- **Inbox deal bodies (JSON):** `https://ourtechaccessories.com/pages/inbox-deal` — rebuild via `shared/skills/store-inbox/scripts/build-inbox-deal-page.py`
 - **Storefront goals:** _(homepage hero, PDP refresh, etc.)_
 
 Client ID and client secret live in `.env` only (`SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`). Optional `SHOPIFY_THEME_ACCESS_PASSWORD` for Shopify CLI theme push fallback.

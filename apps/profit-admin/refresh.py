@@ -7,7 +7,7 @@ from typing import Any
 
 from collectors import kie_collector, meta_collector, shopify_collector
 from config import resolve_usdgbp
-from pnl import build_pnl, build_unit_economics
+from pnl import build_pnl, build_product_pnl, build_unit_economics
 from snapshots import write_snapshot
 
 
@@ -42,6 +42,7 @@ def run_refresh() -> dict[str, Any]:
 
     pnl = build_pnl(shopify=shopify, meta=meta, kie=kie)
     units = build_unit_economics(shopify)
+    by_product = build_product_pnl(shopify)
 
     payload: dict[str, Any] = {
         "refreshed_at": datetime.now(timezone.utc).isoformat(),
@@ -55,5 +56,6 @@ def run_refresh() -> dict[str, Any]:
         },
         "pnl": pnl,
         "unit_economics": units,
+        "product_pnl": by_product,
     }
     return write_snapshot(payload)
