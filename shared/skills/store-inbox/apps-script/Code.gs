@@ -456,9 +456,10 @@ function triageThreadLocked_(thread) {
     label = 'DEAL';
   }
 
-  // "Speak to the owner" — pitch → decline+deal; otherwise ask what it concerns first (never escalate yet).
+  // "Speak to the owner" / "who runs this account" — pitch → decline+deal;
+  // otherwise ask what it concerns first (never escalate on this message).
   if (
-    isOwnerEscalationAsk_(subject, body) &&
+    (isOwnerEscalationAsk_(subject, body) || classifierImpliesOwnerAsk_(result, subject, body)) &&
     label !== 'BOT' &&
     label !== 'TRANSACTIONAL' &&
     label !== 'DEAL'
@@ -696,15 +697,16 @@ function geminiClassify_(apiKey, from, subject, body, context) {
     'classify as FAQ/DEAL/CUSTOMER for that question and answer it.\n' +
     'If the message ONLY asks whether this is the right store inbox/contact, choose FAQ and confirm hello@ is the store customer email.\n' +
     'If the message ONLY asks whether ourtechaccessories.com is the official website, choose FAQ and confirm yes.\n' +
-    'If they ask to speak with / talk to / connect to the store owner or manager:\n' +
+    'If they ask to speak with / talk to / connect to the store owner or manager, ' +
+    'OR ask who runs / owns / operates this account/store (without a stated order topic):\n' +
     '- If it is (or follows) a sales/SEO/agency/partnership pitch → choose PITCH (decline + deal).\n' +
-    '- Otherwise choose CUSTOMER only when they already stated a customer/order topic in the same message; ' +
-    'if they only ask for the owner with no topic, still choose CUSTOMER (we ask what it concerns first and escalate on their next reply).\n' +
-    'Do NOT treat "speak to the owner" as FAQ inbox-confirm.\n' +
+    '- Otherwise choose FAQ (we will ask what their request is about first — do NOT treat as needing a human yet).\n' +
+    'Do NOT choose CUSTOMER merely because they asked who runs the account or to speak to the owner.\n' +
+    'Do NOT treat "speak to the owner" / "who runs this account" as FAQ inbox-confirm.\n' +
     'If "right inbox / official website" is just an opener before SEO, partnership, agency, or marketing pitch, choose PITCH.\n' +
     'CUSTOMER = order number, tracking, refund, return, damaged item, wrong colour, payment problem, ' +
-    'customer ask to speak to the owner/manager, or anything needing account/order data.\n' +
-    'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate. Do NOT use UNCLEAR for a bare greeting or a clear discount ask.\n' +
+    'or a stated customer topic after we asked what the owner request was about.\n' +
+    'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate. Do NOT use UNCLEAR for a bare greeting, owner-identity ask, or a clear discount ask.\n' +
     'TRANSACTIONAL = receipts, Shopify, Google, banks, 2FA.\n' +
     'CLOSE = thread wrapping up: short thanks / cheers / all good / that helps / perfect / sorted, ' +
     'with no new question (prefer CLOSE over IGNORE when PRIOR CONTEXT shows we already helped).\n' +
@@ -770,7 +772,7 @@ function heuristicClassify_(from, subject, body) {
     if (hasOrderSupportSignals_(subject, body)) {
       return { label: 'CUSTOMER', reason: 'owner ask + order/support', confidence: 0.85 };
     }
-    return { label: 'CUSTOMER', reason: 'asked for store owner/manager', confidence: 0.8 };
+    return { label: 'FAQ', reason: 'owner-identity ask — clarify first', confidence: 0.8 };
   }
 
   if (isShippingFaqAsk_(subject, body)) {
@@ -1044,7 +1046,7 @@ function defaultOwnerAskReply_() {
   var hello = helloFrom_();
   return (
     'Hi,\n\n' +
-    'Happy to help. Could you tell me what you need the owner for ' +
+    'Happy to help. Could you tell me what this is about ' +
     '(an order, a product question, shipping, or something else)? ' +
     'Reply with a short note and we will take it from there.\n\n' +
     'Our Tech Accessories\n' +
@@ -1150,11 +1152,11 @@ function isGenericGreeting_(subject, body) {
   return false;
 }
 
-/** Ask to speak with / connect to the store owner or manager (not "is this the owner contact?"). */
+/** Ask to speak with owner/manager, or who runs/owns the account (not inbox-confirm FAQ). */
 function isOwnerEscalationAsk_(subject, body) {
   var blob = ((subject || '') + ' ' + (body || '')).toLowerCase().replace(/\s+/g, ' ');
   if (!blob) return false;
-  // Inbox-confirm style ("is this the store owner contact?") is FAQ, not escalation.
+  // Inbox-confirm style ("is this the store owner contact?") is FAQ, not owner-ask.
   if (
     (blob.indexOf('right inbox') !== -1 ||
       blob.indexOf('correct inbox') !== -1 ||
@@ -1163,7 +1165,9 @@ function isOwnerEscalationAsk_(subject, body) {
       blob.indexOf('right contact') !== -1) &&
     blob.indexOf('speak') === -1 &&
     blob.indexOf('talk') === -1 &&
-    blob.indexOf('connect') === -1
+    blob.indexOf('connect') === -1 &&
+    blob.indexOf('who runs') === -1 &&
+    blob.indexOf('who owns') === -1
   ) {
     return false;
   }
@@ -1183,7 +1187,39 @@ function isOwnerEscalationAsk_(subject, body) {
     return true;
   }
   if (blob.indexOf('connect me to the store owner') !== -1) return true;
+  // Indirect owner asks (clarify first — do not escalate yet)
+  if (/\bwho\s+(runs|owns|operates|manages)\b/.test(blob) && /\b(this\s+)?(account|store|shop|business|page)\b/.test(blob)) {
+    return true;
+  }
+  if (/\bwho\s+(runs|owns|operates|manages)\s+this\b/.test(blob)) return true;
+  if (/\bwho('?s| is)\s+(the\s+)?(real\s+)?(owner|manager|founder|operator)\b/.test(blob)) return true;
+  if (/\b(are you|is this)\s+(the\s+)?(store\s+)?(owner|manager|founder)\b/.test(blob)) return true;
+  if (/\bwho\s+is\s+in\s+charge\b/.test(blob)) return true;
+  if (/\b(owner|manager)\s+of\s+(this\s+)?(account|store|shop)\b/.test(blob)) return true;
   return false;
+}
+
+/**
+ * Gemini sometimes labels owner-identity asks as CUSTOMER; catch by reason text too.
+ * Only when there is no clear order/support signal and it is not a pitch.
+ */
+function classifierImpliesOwnerAsk_(result, subject, body) {
+  if (hasOrderSupportSignals_(subject, body)) return false;
+  if (looksLikePitch_(subject, body, '')) return false;
+  if (isOwnerEscalationAsk_(subject, body)) return true;
+  var reason = String((result && result.reason) || '').toLowerCase();
+  if (!reason) return false;
+  var ownerish =
+    reason.indexOf('owner') !== -1 ||
+    reason.indexOf('manager') !== -1 ||
+    reason.indexOf('who runs') !== -1 ||
+    reason.indexOf('who owns') !== -1 ||
+    reason.indexOf('speak to') !== -1 ||
+    reason.indexOf('talk to') !== -1;
+  if (!ownerish) return false;
+  // Already stated a customer topic in the same mail → real escalate, not clarify-first
+  if (hasOrderSupportSignals_(subject, body)) return false;
+  return true;
 }
 
 /**

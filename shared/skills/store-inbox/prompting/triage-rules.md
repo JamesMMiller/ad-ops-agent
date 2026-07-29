@@ -65,7 +65,7 @@ Answerable from store knowledge only (no order lookup):
 Examples:
 - “Can I speak with the store owner about a partnership / SEO?” → pitch decline + deal
 - “Can I speak with the store owner?” → ask what it concerns (no escalate yet)
-- “Connect me to the owner — order #1002 not arrived” → still ask what it concerns first if the message is mainly an owner ask; once they clarify (or if follow-up states the order), escalate
+- “Who runs this account?” / “Who owns this store?” → ask what it concerns (no escalate yet)
 - After bot asks: “It’s about my missing order” → escalate
 
 ## DEAL (discount / price) — examples
