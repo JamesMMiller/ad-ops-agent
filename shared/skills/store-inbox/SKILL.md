@@ -2,10 +2,11 @@
 name: store-inbox
 description: >-
   Set up hello@ourtechaccessories.com and an LLM Gmail triage bot that declines
-  sales/spam pitches, auto-answers simple FAQ (e.g. UK-only shipping), and
-  escalates order/refund mail to a personal address while replies send from
-  hello@. Use when the user mentions store inbox spam, fake customer emails,
-  hello@ domain email, ImprovMX, FAQ auto-reply, or inbox triage.
+  sales/spam pitches, auto-answers simple FAQ (e.g. UK-only shipping), escalates
+  order/refund mail, and optionally sends a one-shot deal follow-up when a
+  support thread closes. Use when the user mentions store inbox spam, fake
+  customer emails, hello@ domain email, ImprovMX, FAQ auto-reply, inbox triage,
+  or closed-thread deal follow-ups.
 ---
 
 # Store inbox (hello@ + triage bot)
@@ -19,9 +20,11 @@ Outbound: reply **From: hello@ourtechaccessories.com**.
 
 1. This file — architecture + hard rules.
 2. **[prompting/setup-hello.md](prompting/setup-hello.md)** — DNS / ImprovMX / Gmail Send-as.
-3. **[prompting/triage-rules.md](prompting/triage-rules.md)** — decline / FAQ / escalate.
+3. **[prompting/triage-rules.md](prompting/triage-rules.md)** — decline / FAQ / escalate / close.
 4. **[prompting/store-faq.md](prompting/store-faq.md)** — facts the bot may auto-answer.
-5. **[apps-script/Code.gs](apps-script/Code.gs)** + **[apps-script/README.md](apps-script/README.md)** — install the bot.
+5. **[prompting/deal-followup.md](prompting/deal-followup.md)** — closed-thread deal mail (optional).
+6. **[apps-script/Code.gs](apps-script/Code.gs)** + **[apps-script/DealFollowupBodies.gs](apps-script/DealFollowupBodies.gs)** + **[apps-script/README.md](apps-script/README.md)** — install the bot.
+7. Generic Apps Script craft (mailbox guard, Send-as vs `replyTo`): **[../google-apps-script/SKILL.md](../google-apps-script/SKILL.md)**.
 
 ## Architecture
 
@@ -31,14 +34,17 @@ Sender
   → hello@ourtechaccessories.com
   → forward into store Gmail
   → Apps Script (LLM classify)
-        ├─ PITCH / AGENCY_SPAM → polite auto-decline From hello@, label, archive
+        ├─ PITCH / AGENCY_SPAM → polite auto-decline From hello@, optional deal follow-up, label, archive
         ├─ FAQ (shipping countries, general delivery) → auto-reply from STORE_FAQ
         ├─ CUSTOMER / ORDER / UNCLEAR → forward to personal + label Escalate
+        ├─ CLOSE (thanks / wrapped up) → optional one-shot deal follow-up
+        ├─ idle FAQ/customer (us last, quiet N hours) → optional deal follow-up
         ├─ pitch declined or clear BOT → inbox-bot/dead (stop); FAQ follow-ups stay open
         └─ TRANSACTIONAL (Shopify/receipts) → leave alone
 James opens escalated mail on personal → replies in Gmail with From: hello@
 ```
 
+Deal creatives: **[prompting/deal-followup.md](prompting/deal-followup.md)** + `apps-script/DealFollowupBodies.gs`.
 ## Hard rules
 
 1. **Never commit** personal email, app passwords, or API keys. Use Gmail Script Properties / `.env`.

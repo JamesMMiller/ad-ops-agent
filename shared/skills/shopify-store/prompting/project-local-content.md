@@ -39,6 +39,8 @@ These paths are under `outputs/` and are **not** committed to git.
 }
 ```
 
+For volume / mix-and-match SKUs set `"template_suffix": "bulk-pack"` and optional `metafields.bulk_pack` / `bulk_pack_enabled` — see [bulk-pack.md](bulk-pack.md) and [product-templates.md](product-templates.md).
+
 See [metafields.md](metafields.md), [pdp-quality-bar.md](pdp-quality-bar.md), [product-templates.md](product-templates.md).
 
 ## Apply

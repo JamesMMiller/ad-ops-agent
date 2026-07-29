@@ -2,11 +2,12 @@
 name: shopify-store
 description: >-
   Update a Shopify storefront via the Admin GraphQL API — products, pages, files,
-  metafields, and theme templates. Uses Dev Dashboard client credentials (client ID + secret).
-  Best-practice CRO copy and UI for homepage, PDP, and landing pages. Dry-run before every
-  write. Use when the user asks to update Shopify theme, homepage, product page,
-  store copy, PDP, metafields, product templates, or publish creatives to their Shopify store.
-  Not for Meta ads (meta-ad-builder) or generating images/video (KIE skills).
+  metafields, and theme templates (tech-accessory and bulk-pack volume/mix PDPs).
+  Uses Dev Dashboard client credentials (client ID + secret). Best-practice CRO copy
+  and UI for homepage, PDP, and landing pages. Dry-run before every write. Use when
+  the user asks to update Shopify theme, homepage, product page, bulk/volume pack PDP,
+  store copy, PDP, metafields, product templates, or publish creatives to their Shopify
+  store. Not for Meta ads (meta-ad-builder) or generating images/video (KIE skills).
 ---
 
 # Shopify store
@@ -18,6 +19,7 @@ Update any Shopify store with high-quality copy, images, metafields, and storefr
 - "Update the Shopify homepage" / "improve the product page"
 - "Refresh PDP copy" / "create a draft product page for review"
 - "Add product metafields" / "assign a product template"
+- "Bulk pack / buy more save more / mix colour variants on PDP"
 - "Upload these creatives to Shopify Files"
 
 Do **not** use for Meta ad deployment (`meta-ad-builder`) or generative creative (`kie-external-api`).
@@ -28,7 +30,7 @@ Do **not** use for Meta ad deployment (`meta-ad-builder`) or generative creative
 2. **[prompting/pdp-quality-bar.md](prompting/pdp-quality-bar.md)** — definition of done (hit before apply-live).
 3. **[prompting/storefront-best-practices.md](prompting/storefront-best-practices.md)** — CRO + UI checklist.
 4. **[prompting/metafields.md](prompting/metafields.md)** — standard `custom.*` pack.
-5. **[prompting/product-templates.md](prompting/product-templates.md)** — `tech-accessory` template.
+5. **[prompting/product-templates.md](prompting/product-templates.md)** — `tech-accessory` + **`bulk-pack`** templates. Volume/mix packs: [prompting/bulk-pack.md](prompting/bulk-pack.md).
 6. **[prompting/project-local-content.md](prompting/project-local-content.md)** — gitignored project layout.
 
 ## Project-local content (not in git)
@@ -106,7 +108,7 @@ python shared/skills/shopify-store/scripts/shopify_cli.py get-theme-file \
   --filename templates/product.json --out outputs/shopify/backup-product.json
 ```
 
-Pull variants + media associations. Note if `templates/product.tech-accessory.json` already exists.
+Pull variants + media associations. Note which product templates exist (`tech-accessory`, `bulk-pack`, `gan-pack`).
 
 ### Phase 3 — Draft copy locally
 
@@ -135,7 +137,7 @@ python shared/skills/shopify-store/scripts/apply_product_project.py \
 
 ### Phase 6 — Product template (if missing)
 
-Clone/tune `templates/product.tech-accessory.json` per [product-templates.md](prompting/product-templates.md). Upsert via `upsert-theme-files` or `theme_push.sh`. Assign with `template_suffix` in `project.json` on the next `--apply-live`, or `productUpdate.templateSuffix`.
+Pick type per [product-templates.md](prompting/product-templates.md): `tech-accessory` (standard multi-colour) or **`bulk-pack`** (volume / mix-and-match — [bulk-pack.md](prompting/bulk-pack.md)). Ensure theme files exist (`product.*.json` + `snippets/bulk-mix-pack.liquid` for packs). Upsert via `upsert-theme-files` or `theme_push.sh`. Assign with `template_suffix` in `project.json` on the next `--apply-live`, or `productUpdate.templateSuffix`.
 
 ### Phase 7 — Assets
 

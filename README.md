@@ -323,9 +323,10 @@ Full guide: [`shared/skills/store-inbox/SKILL.md`](shared/skills/store-inbox/SKI
 | `shared/skills/image-ad-prompting/` | 37 templates, safety suffixes, `OVERVIEW.md` |
 | `shared/skills/edit-video/` | Local ffmpeg soft-stitch (no API) |
 | `shared/skills/pixar-style-ad/` · `claymation-ad/` · `caption-video/` | Multi-step creative pipelines |
-| `shared/skills/shopify-store/` | Shopify Admin API — products, pages, theme files |
+| `shared/skills/shopify-store/` | Shopify Admin API — products, pages, theme files (`tech-accessory`, `bulk-pack`) |
 | `shared/skills/blog-writing/` | Journey blog voice + Hashnode draft/publish CLI |
 | `shared/skills/store-inbox/` | `hello@ourtechaccessories.com` + Gmail Apps Script triage |
+| `shared/skills/google-apps-script/` | Generic Apps Script authoring (Gmail/Sheets, identity, triggers) |
 | `blog/` | Committed post source (`blog/posts/<date>-<slug>/`) |
 | `shared/skills/meta-ad-builder/` | Meta Marketing API publish (PAUSED) |
 | `MASTER_CONTEXT.template.md` | Template for workspace memory |

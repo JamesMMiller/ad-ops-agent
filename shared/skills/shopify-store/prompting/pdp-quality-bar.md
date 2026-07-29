@@ -17,7 +17,7 @@ Agents must hit this bar **before** asking the user to approve `--apply-live`. D
    - Empty-media drafts are a **bug**
 6. **Admin review path** — user reviews draft (or Theme Preview) before `--apply-live`. Never set the live ACTIVE product to `DRAFT`.
 7. **Metafields** — set the standard `custom.*` pack from [metafields.md](metafields.md) on apply-live (and optionally on draft).
-8. **Product template** — for tech accessories, assign `templateSuffix: tech-accessory` when the theme file exists (see [product-templates.md](product-templates.md)).
+8. **Product template** — for tech accessories, assign `templateSuffix: tech-accessory` when the theme file exists. For volume / mix-and-match packs, use `bulk-pack` (see [product-templates.md](product-templates.md) · [bulk-pack.md](bulk-pack.md)).
 
 ## Strongly recommended
 

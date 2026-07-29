@@ -10,6 +10,11 @@
  *   MAILBOX_ALIAS       = optional; default HELLO_FROM
  *   DRY_RUN             = true|false  (default false)
  *   STORE_FAQ           = optional override of default store knowledge (see prompting/store-faq.md)
+ *   DEAL_FOLLOWUP_ENABLED = true|false (default false) — closed-thread deal mail
+ *   DEAL_FOLLOWUP_IDLE_HOURS = hours after our last reply before idle deal (default 48)
+ *   DEAL_SUBJECT / DEAL_HTML / DEAL_PLAIN / DEAL_*_DRIVE_ID — optional body overrides
+ *
+ * Also paste DealFollowupBodies.gs (default GaN deal HTML/plain) into the same project.
  */
 
 var DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
@@ -20,11 +25,22 @@ var LABEL_UNCLEAR = 'inbox-bot/unclear';
 var LABEL_FAQ = 'inbox-bot/faq';
 var LABEL_DONE = 'inbox-bot/processed';
 var LABEL_DEAD = 'inbox-bot/dead';
+var LABEL_DEAL = 'inbox-bot/deal-followup';
+var LABEL_CLOSE = 'inbox-bot/closed';
 
 /** Default knowledge — keep in sync with prompting/store-faq.md */
 var DEFAULT_STORE_FAQ =
   'Our Tech Accessories (UK Shopify store).\n' +
-  'Contact: hello@ourtechaccessories.com\n' +
+  'Contact: hello@ourtechaccessories.com is the official customer inbox for Our Tech Accessories (ourtechaccessories.com).\n' +
+  'If asked "is this the right inbox / store email / store owner contact": confirm this is the store\'s customer email. ' +
+  'Do not share personal name, personal email, phone, or home address. ' +
+  'Do not role-play as a named owner; offer to help with orders or product questions.\n' +
+  'Generic greetings / check-ins with no real question (hi, hello, are you there, anyone there): ' +
+  'reply with the short customer-support intro. Confirm this is the store support email and ask them to reply with product or order details (order number if they have one).\n' +
+  'Official website: https://ourtechaccessories.com (with or without www). ' +
+  'If asked "is this your official website?" and they mention ourtechaccessories.com, confirm yes. ' +
+  'Do not invent other domains. If they name a different domain, say you only operate ourtechaccessories.com ' +
+  'and they should not pay elsewhere; escalate if they already paid on another site.\n' +
   'Shipping destination: UK only for now. We do not ship internationally yet.\n' +
   'Future: We plan to offer international shipping later. No confirmed date. Do not promise a month.\n' +
   'Shipping cost: Depends on the product. Some items include free UK shipping (shown on the product page and at checkout). ' +
@@ -36,11 +52,13 @@ var DEFAULT_STORE_FAQ =
 
 function installTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'triageRecent') ScriptApp.deleteTrigger(t);
+    var fn = t.getHandlerFunction();
+    if (fn === 'triageRecent' || fn === 'dealFollowUpSweep') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('triageRecent').timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger('dealFollowUpSweep').timeBased().everyHours(1).create();
   ensureLabels_();
-  Logger.log('Trigger installed: triageRecent every 5 minutes');
+  Logger.log('Triggers installed: triageRecent (5m), dealFollowUpSweep (1h)');
 }
 
 function triageRecent() {
@@ -138,13 +156,21 @@ function triageThread_(thread) {
     return;
   }
 
-  if (label === 'PITCH') {
+  if (label === 'CLOSE' || (label === 'IGNORE' && isClosingThanks_(subject, body))) {
+    thread.addLabel(getLabel_(LABEL_CLOSE));
+    if (!dry && maybeSendDealFollowUp_(thread, msg, 'close')) {
+      // deal sent
+    } else if (!dry) {
+      thread.moveToArchive();
+    }
+  } else if (label === 'PITCH') {
     thread.addLabel(getLabel_(LABEL_PITCH));
     if (!dry) {
       sendDecline_(thread, msg);
+      maybeSendDealFollowUp_(thread, msg, 'pitch');
       thread.moveToArchive();
     }
-    // Decline closes the thread for the bot
+    // Decline closes triage; deal (if enabled) already sent above
     markDead_(thread, 'pitch declined');
   } else if (label === 'FAQ') {
     thread.addLabel(getLabel_(LABEL_FAQ));
@@ -262,17 +288,28 @@ function geminiClassify_(apiKey, from, subject, body, context) {
   var faq = storeFaq_();
   var prompt =
     'You triage email for a small UK Shopify store (Our Tech Accessories).\n' +
-    'Return ONLY compact JSON: {"label":"PITCH|FAQ|CUSTOMER|UNCLEAR|TRANSACTIONAL|IGNORE|BOT","reason":"short","confidence":0.0}\n' +
+    'Return ONLY compact JSON: {"label":"PITCH|FAQ|CUSTOMER|UNCLEAR|TRANSACTIONAL|IGNORE|CLOSE|BOT","reason":"short","confidence":0.0}\n' +
     'PITCH = sales/SEO/agency/partnership/"we can stop your spam" cold outreach.\n' +
     'FAQ = general question answerable ONLY from this store knowledge (no order lookup needed):\n' +
     '---STORE KNOWLEDGE---\n' +
     faq +
     '\n---END---\n' +
-    'Examples of FAQ: do you ship to my country, international shipping, UK only, delivery times in general, who are you / contact email.\n' +
+    'Examples of FAQ: do you ship to my country, international shipping, UK only, delivery times, ' +
+    'free shipping / shipping fee, is this the right inbox, is this the store email, ' +
+    'am I emailing the store / store owner contact, is this your official website, ' +
+    'ourtechaccessories.com official site, who are you / contact email.\n' +
+    'If the message is ONLY a greeting or check-in with no real question ' +
+    '(hi, hello, hey, are you there, anyone there, just checking), choose FAQ. ' +
+    'Reply with the customer-support intro (this is store support; ask for product/order details).\n' +
+    'If the message ONLY asks whether this is the right store inbox/contact, choose FAQ and confirm hello@ is the store customer email.\n' +
+    'If the message ONLY asks whether ourtechaccessories.com is the official website, choose FAQ and confirm yes.\n' +
+    'If "right inbox / store owner / official website" is just an opener before SEO, partnership, agency, or marketing pitch, choose PITCH.\n' +
     'CUSTOMER = order number, tracking, refund, return, damaged item, wrong colour, payment problem, or anything needing account/order data.\n' +
-    'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate.\n' +
+    'UNCLEAR = maybe customer or maybe FAQ but not safe to auto-answer. Escalate. Do NOT use UNCLEAR for a bare greeting.\n' +
     'TRANSACTIONAL = receipts, Shopify, Google, banks, 2FA.\n' +
-    'IGNORE = newsletters/bulk, or a short thanks/ok with no new question.\n' +
+    'CLOSE = thread wrapping up: short thanks / cheers / all good / that helps / perfect / sorted, ' +
+    'with no new question (prefer CLOSE over IGNORE when PRIOR CONTEXT shows we already helped).\n' +
+    'IGNORE = newsletters/bulk, or a short ok with no thanks and no new question.\n' +
     'BOT = clearly an autoresponder, chatbot, or non-human loop (not a real shopper). Only when obvious.\n' +
     'This may be a follow-up in an existing thread. Use PRIOR CONTEXT when the latest message is short (e.g. "and Germany?").\n' +
     'When unsure between FAQ and CUSTOMER, choose CUSTOMER or UNCLEAR (never invent order facts).\n' +
@@ -302,6 +339,10 @@ function heuristicClassify_(from, subject, body) {
     return { label: 'TRANSACTIONAL', reason: 'known transactional', confidence: 0.9 };
   }
 
+  if (isClosingThanks_(subject, body)) {
+    return { label: 'CLOSE', reason: 'closing thanks', confidence: 0.7 };
+  }
+
   var customerHints = [
     'order #', 'order number', 'tracking', 'refund', 'return', 'parcel',
     'damaged', 'wrong colour', 'wrong color', 'my package', 'where is my order',
@@ -310,17 +351,6 @@ function heuristicClassify_(from, subject, body) {
   for (var i = 0; i < customerHints.length; i++) {
     if (blob.indexOf(customerHints[i]) !== -1) {
       return { label: 'CUSTOMER', reason: 'customer keyword: ' + customerHints[i], confidence: 0.7 };
-    }
-  }
-
-  var faqHints = [
-    'ship to', 'shipping to', 'do you ship', 'international', 'deliver to',
-    'outside the uk', 'outside uk', 'europe', 'eu shipping', 'worldwide',
-    'only uk', 'uk only', 'how long does delivery', 'delivery time', 'postage'
-  ];
-  for (var f = 0; f < faqHints.length; f++) {
-    if (blob.indexOf(faqHints[f]) !== -1) {
-      return { label: 'FAQ', reason: 'faq keyword: ' + faqHints[f], confidence: 0.65 };
     }
   }
 
@@ -337,6 +367,27 @@ function heuristicClassify_(from, subject, body) {
     return { label: 'PITCH', reason: 'pitch keywords x' + hits, confidence: 0.65 };
   }
 
+  if (isGenericGreeting_(subject, body)) {
+    return { label: 'FAQ', reason: 'generic greeting/check-in', confidence: 0.75 };
+  }
+
+  var faqHints = [
+    'ship to', 'shipping to', 'do you ship', 'international', 'deliver to',
+    'outside the uk', 'outside uk', 'europe', 'eu shipping', 'worldwide',
+    'only uk', 'uk only', 'how long does delivery', 'delivery time', 'postage',
+    'free shipping', 'shipping fee', 'shipping included',
+    'right inbox', 'correct inbox', 'right email', 'correct email',
+    'store owner', 'store\'s email', 'stores email', 'official email',
+    'is this the store', 'emailing the store', 'right contact',
+    'official website', 'official site', 'official web',
+    'ourtechaccessories.com', 'is this your website', 'your website'
+  ];
+  for (var f = 0; f < faqHints.length; f++) {
+    if (blob.indexOf(faqHints[f]) !== -1) {
+      return { label: 'FAQ', reason: 'faq keyword: ' + faqHints[f], confidence: 0.65 };
+    }
+  }
+
   return { label: 'UNCLEAR', reason: 'no strong signal', confidence: 0.4 };
 }
 
@@ -347,6 +398,10 @@ function sendFaqReply_(thread, msg, from, subject, body, context) {
 }
 
 function draftFaqReply_(from, subject, body, context) {
+  // Fixed copy for bare greetings (don't let the model improvise)
+  if (isGenericGreeting_(subject, body)) {
+    return defaultSupportIntroReply_();
+  }
   var key = props_().getProperty('GEMINI_API_KEY');
   var faq = storeFaq_();
   if (key) {
@@ -356,7 +411,13 @@ function draftFaqReply_(from, subject, body, context) {
       Logger.log('FAQ draft failed, template fallback: ' + e);
     }
   }
-  return defaultFaqReply_();
+  if (isInboxConfirmQuestion_(subject, body)) {
+    return defaultInboxConfirmReply_();
+  }
+  if (isOfficialWebsiteQuestion_(subject, body)) {
+    return defaultOfficialWebsiteReply_();
+  }
+  return defaultSupportIntroReply_();
 }
 
 function geminiFaqReply_(apiKey, faq, from, subject, body, context) {
@@ -393,14 +454,122 @@ function geminiFaqReply_(apiKey, faq, from, subject, body, context) {
 }
 
 function defaultFaqReply_() {
+  return defaultSupportIntroReply_();
+}
+
+function defaultSupportIntroReply_() {
   var hello = helloFrom_();
   return (
     'Hi,\n\n' +
-    'Thanks for getting in touch. We currently ship to the United Kingdom only. ' +
-    "International shipping isn't available yet, though we do plan to expand in the future " +
-    '(no firm date yet).\n\n' +
-    'UK delivery is usually a few working days after dispatch, depending on the product and carrier.\n\n' +
-    'If you have an order question, reply with your order number and we will help.\n\n' +
+    'Thanks for getting in touch. This is the customer support email for Our Tech Accessories.\n\n' +
+    'If you have a product question, or need help with an order, reply with a few details. ' +
+    'For order help, include your order number if you have it.\n\n' +
+    'Our Tech Accessories\n' +
+    hello +
+    '\n'
+  );
+}
+
+function isGenericGreeting_(subject, body) {
+  var raw = String(body || '');
+  // Drop common mobile mail footers so short check-ins still match
+  raw = raw.replace(/sent from .*$/gim, '');
+  raw = raw.replace(/get outlook for .*$/gim, '');
+  var text = (String(subject || '') + ' ' + raw).toLowerCase();
+  text = text.replace(/\s+/g, ' ').trim();
+
+  var greetHints = [
+    'are you there',
+    'anyone there',
+    'you there',
+    'just checking',
+    'hello there',
+    'hi there',
+    'hey there',
+    'good morning',
+    'good afternoon',
+    'good evening'
+  ];
+  for (var i = 0; i < greetHints.length; i++) {
+    if (text.indexOf(greetHints[i]) !== -1) return true;
+  }
+
+  // Very short hello/hi/hey with little else
+  var compact = text
+    .replace(/[^a-z0-9\s?]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  var words = compact.split(' ').filter(function (w) {
+    return w.length;
+  });
+  if (words.length <= 6) {
+    var first = words[0] || '';
+    if (
+      first === 'hi' ||
+      first === 'hello' ||
+      first === 'hey' ||
+      first === 'hola' ||
+      compact === 'hello our tech accessories' ||
+      compact.indexOf('hello our tech') === 0
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isInboxConfirmQuestion_(subject, body) {
+  var blob = ((subject || '') + ' ' + (body || '')).toLowerCase();
+  var hints = [
+    'right inbox',
+    'correct inbox',
+    'right email',
+    'correct email',
+    'store owner',
+    'is this the store',
+    'emailing the store',
+    'right contact'
+  ];
+  for (var i = 0; i < hints.length; i++) {
+    if (blob.indexOf(hints[i]) !== -1) return true;
+  }
+  return false;
+}
+
+function isOfficialWebsiteQuestion_(subject, body) {
+  var blob = ((subject || '') + ' ' + (body || '')).toLowerCase();
+  var asksWebsite =
+    blob.indexOf('official website') !== -1 ||
+    blob.indexOf('official site') !== -1 ||
+    blob.indexOf('your website') !== -1 ||
+    blob.indexOf('official web') !== -1;
+  var mentionsOurs = blob.indexOf('ourtechaccessories.com') !== -1;
+  if (asksWebsite) return true;
+  if (mentionsOurs && (blob.indexOf('official') !== -1 || blob.indexOf('is this') !== -1)) {
+    return true;
+  }
+  return false;
+}
+
+function defaultInboxConfirmReply_() {
+  var hello = helloFrom_();
+  return (
+    'Hi,\n\n' +
+    "Yes, you're in the right place. This is the customer email for Our Tech Accessories " +
+    '(ourtechaccessories.com).\n\n' +
+    'If you have an order or product question, reply with the details (and your order number if you have one) and we will help.\n\n' +
+    'Our Tech Accessories\n' +
+    hello +
+    '\n'
+  );
+}
+
+function defaultOfficialWebsiteReply_() {
+  var hello = helloFrom_();
+  return (
+    'Hi,\n\n' +
+    'Yes. ourtechaccessories.com is our official website.\n\n' +
+    'If you have an order or product question, reply with the details (and your order number if you have one) and we will help.\n\n' +
     'Our Tech Accessories\n' +
     hello +
     '\n'
@@ -564,11 +733,18 @@ function props_() {
 }
 
 function ensureLabels_() {
-  [LABEL_PITCH, LABEL_CUSTOMER, LABEL_UNCLEAR, LABEL_FAQ, LABEL_DONE, LABEL_DEAD].forEach(
-    function (name) {
-      getLabel_(name);
-    }
-  );
+  [
+    LABEL_PITCH,
+    LABEL_CUSTOMER,
+    LABEL_UNCLEAR,
+    LABEL_FAQ,
+    LABEL_DONE,
+    LABEL_DEAD,
+    LABEL_DEAL,
+    LABEL_CLOSE
+  ].forEach(function (name) {
+    getLabel_(name);
+  });
 }
 
 function getLabel_(name) {
@@ -583,4 +759,300 @@ function hasLabel_(thread, name) {
     if (labels[i].getName() === name) return true;
   }
   return false;
+}
+
+/** --- Closed-thread deal follow-up --- */
+
+function dealFollowUpEnabled_() {
+  return String(props_().getProperty('DEAL_FOLLOWUP_ENABLED') || 'false').toLowerCase() === 'true';
+}
+
+/**
+ * Hourly: FAQ/customer threads where we replied last and they went quiet → one deal mail.
+ */
+function dealFollowUpSweep() {
+  if (!dealFollowUpEnabled_()) {
+    Logger.log('dealFollowUpSweep: DEAL_FOLLOWUP_ENABLED is not true — skip');
+    return;
+  }
+  ensureLabels_();
+  var dry = String(props_().getProperty('DRY_RUN') || 'false').toLowerCase() === 'true';
+  var hours = Number(props_().getProperty('DEAL_FOLLOWUP_IDLE_HOURS') || '48');
+  if (!(hours > 0)) hours = 48;
+  var idleMs = hours * 60 * 60 * 1000;
+  var q =
+    '(label:' +
+    LABEL_FAQ +
+    ' OR label:' +
+    LABEL_CUSTOMER +
+    ') -label:' +
+    LABEL_DEAL +
+    ' -label:' +
+    LABEL_DEAD +
+    ' -label:' +
+    LABEL_PITCH +
+    ' newer_than:21d';
+  var threads = GmailApp.search(q, 0, 40);
+  var now = Date.now();
+  threads.forEach(function (thread) {
+    var messages = thread.getMessages();
+    if (!messages.length) return;
+    var last = messages[messages.length - 1];
+    if (!isFromUs_(last.getFrom())) return;
+    if (now - last.getDate().getTime() < idleMs) return;
+    if (dry) {
+      Logger.log('DRY_RUN idle deal candidate thread=' + thread.getId());
+      return;
+    }
+    maybeSendDealFollowUp_(thread, last, 'idle');
+  });
+}
+
+function isClosingThanks_(subject, body) {
+  var raw = String(body || '');
+  raw = raw.replace(/sent from .*$/gim, '');
+  raw = raw.replace(/get outlook for .*$/gim, '');
+  var text = (String(subject || '') + ' ' + raw).toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+
+  // Still a real question → not closing
+  if (
+    text.indexOf('?') !== -1 &&
+    (text.indexOf('order') !== -1 ||
+      text.indexOf('ship') !== -1 ||
+      text.indexOf('refund') !== -1 ||
+      text.indexOf('track') !== -1 ||
+      text.indexOf('return') !== -1)
+  ) {
+    return false;
+  }
+
+  var hints = [
+    'thank you',
+    'thanks',
+    'thx',
+    'cheers',
+    'much appreciated',
+    'all good',
+    'all set',
+    "that's all",
+    'thats all',
+    'that helps',
+    "that's helpful",
+    'perfect',
+    'sorted',
+    'no further questions',
+    'that answers',
+    'great help'
+  ];
+  var hit = false;
+  for (var i = 0; i < hints.length; i++) {
+    if (text.indexOf(hints[i]) !== -1) {
+      hit = true;
+      break;
+    }
+  }
+  if (!hit) return false;
+
+  var compact = text.replace(/[^a-z0-9\s']/g, ' ').replace(/\s+/g, ' ').trim();
+  var words = compact.split(' ').filter(function (w) {
+    return w.length;
+  });
+  return words.length <= 40;
+}
+
+function engagedForDeal_(thread) {
+  return (
+    hasLabel_(thread, LABEL_FAQ) ||
+    hasLabel_(thread, LABEL_CUSTOMER) ||
+    hasLabel_(thread, LABEL_UNCLEAR) ||
+    thread.getMessageCount() >= 3
+  );
+}
+
+function maybeSendDealFollowUp_(thread, msg, reason) {
+  if (!dealFollowUpEnabled_()) return false;
+  if (hasLabel_(thread, LABEL_DEAL)) return false;
+  if (isDead_(thread)) return false;
+  // Pitch threads only get a deal when reason is explicitly 'pitch'
+  if (hasLabel_(thread, LABEL_PITCH) && reason !== 'pitch') return false;
+  if (!engagedForDeal_(thread) && reason !== 'idle' && reason !== 'pitch') {
+    Logger.log('Skip deal follow-up (not engaged): ' + thread.getId());
+    return false;
+  }
+  try {
+    sendDealFollowUp_(thread, msg, reason);
+    return true;
+  } catch (e) {
+    Logger.log('Deal follow-up failed: ' + e);
+    return false;
+  }
+}
+
+function sendDealFollowUp_(thread, msg, reason) {
+  var hello = helloFrom_();
+  var name = guessFirstName_(msg.getFrom());
+  var mail = buildDealMail_(name, reason);
+  var opts = mail.options;
+
+  // Prefer From hello@ when Send-as works; fall back to replyTo.
+  try {
+    opts.from = hello;
+    thread.reply(mail.plain, opts);
+  } catch (e) {
+    Logger.log('Deal follow-up from: failed (' + e + '); retry with replyTo');
+    delete opts.from;
+    opts.replyTo = hello;
+    thread.reply(mail.plain, opts);
+  }
+
+  thread.addLabel(getLabel_(LABEL_DEAL));
+  thread.addLabel(getLabel_(LABEL_CLOSE));
+  thread.moveToArchive();
+  Logger.log(
+    'Deal follow-up sent (' +
+      reason +
+      ') thread=' +
+      thread.getId() +
+      ' subject=' +
+      mail.subject
+  );
+}
+
+/**
+ * Manual test: sends one deal email (not a thread reply).
+ * Run while signed into our.tech.accessories@gmail.com.
+ * Optional props: DEAL_TEST_TO, DEAL_TEST_NAME, DEAL_TEST_REASON (close|pitch|idle).
+ */
+function sendDealFollowUpTest() {
+  assertStoreMailboxForDeal_();
+  var to = props_().getProperty('DEAL_TEST_TO') || 'J.Malachy.miller@gmail.com';
+  var name = props_().getProperty('DEAL_TEST_NAME') || 'James';
+  var reason = props_().getProperty('DEAL_TEST_REASON') || 'close';
+  var mail = buildDealMail_(name, reason);
+  var hello = helloFrom_();
+  var opts = mail.options;
+  opts.replyTo = hello;
+  try {
+    opts.from = hello;
+    GmailApp.sendEmail(to, mail.subject, mail.plain, opts);
+  } catch (e) {
+    Logger.log('Test from: failed (' + e + '); retry with replyTo only');
+    delete opts.from;
+    GmailApp.sendEmail(to, mail.subject, mail.plain, opts);
+  }
+  Logger.log('TEST deal follow-up SENT to ' + to + ' reason=' + reason);
+}
+
+function buildDealMail_(name, reason) {
+  var copy = dealFollowUpCopy_(reason);
+  var vars = {
+    NAME: name || '',
+    NAME_SUFFIX: name ? ' ' + name : '',
+    INTRO: copy.intro,
+    BRIDGE: copy.bridge
+  };
+  var subject =
+    props_().getProperty('DEAL_SUBJECT') ||
+    'One more thing from Our Tech Accessories';
+  var plain = sanitizeCustomerReply_(applyDealTokens_(loadDealPlain_(), vars));
+  var html = applyDealTokens_(loadDealHtml_(), vars);
+  return {
+    subject: subject,
+    plain: plain,
+    options: {
+      htmlBody: html,
+      name: props_().getProperty('FROM_NAME') || 'Our Tech Accessories'
+    }
+  };
+}
+
+function assertStoreMailboxForDeal_() {
+  var expected = (
+    props_().getProperty('EXPECTED_MAILBOX') ||
+    'our.tech.accessories@gmail.com'
+  ).toLowerCase();
+  var who = '';
+  try {
+    who = Session.getEffectiveUser().getEmail() || '';
+  } catch (e) {}
+  if (!who) {
+    try {
+      who = Session.getActiveUser().getEmail() || '';
+    } catch (e2) {}
+  }
+  who = String(who).toLowerCase();
+  if (who !== expected) {
+    throw new Error(
+      'Refusing test send. Running as "' +
+        (who || '(unknown)') +
+        '" but expected "' +
+        expected +
+        '". Sign into the store Gmail at script.google.com.'
+    );
+  }
+  Logger.log('OK: running as ' + who);
+}
+
+/** Opening copy by trigger — keep UK, short, no em dashes. */
+function dealFollowUpCopy_(reason) {
+  var r = String(reason || '').toLowerCase();
+  var bridge =
+    props_().getProperty('DEAL_BRIDGE') ||
+    'Our 120W GaN charger with the built-in retractable USB-C cable has a buy-more-save-more offer right now.';
+  var intro;
+  if (r === 'pitch') {
+    intro =
+      props_().getProperty('DEAL_INTRO_PITCH') ||
+      "We're not looking for marketing, SEO, partnership, or agency services. " +
+        'If you shop tech accessories yourself though, here is a current deal from our store.';
+  } else if (r === 'idle') {
+    intro =
+      props_().getProperty('DEAL_INTRO_IDLE') ||
+      'Just a quick follow-up from Our Tech Accessories. Here is a current deal from the shop in case it is useful.';
+  } else {
+    // close (default)
+    intro =
+      props_().getProperty('DEAL_INTRO_CLOSE') ||
+      'Thanks again for getting in touch. While this thread is wrapping up, here is a current deal from the shop in case it is useful.';
+  }
+  return { intro: intro, bridge: bridge };
+}
+
+function applyDealTokens_(text, vars) {
+  var out = String(text || '');
+  Object.keys(vars || {}).forEach(function (k) {
+    out = out.split('{{' + k + '}}').join(String(vars[k]));
+  });
+  return out;
+}
+
+function guessFirstName_(from) {
+  var s = String(from || '').trim();
+  var m = s.match(/^"?([^"<]+)"?\s*</);
+  if (m) {
+    var first = m[1].trim().split(/\s+/)[0];
+    if (first && first.indexOf('@') === -1 && /^[A-Za-z]/.test(first)) {
+      return first.charAt(0).toUpperCase() + first.slice(1);
+    }
+  }
+  return '';
+}
+
+function loadDealPlain_() {
+  var driveId = props_().getProperty('DEAL_PLAIN_DRIVE_ID');
+  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
+  var inline = props_().getProperty('DEAL_PLAIN');
+  if (inline) return inline;
+  if (typeof defaultDealPlain_ === 'function') return defaultDealPlain_();
+  throw new Error('No deal plain body — paste DealFollowupBodies.gs or set DEAL_PLAIN');
+}
+
+function loadDealHtml_() {
+  var driveId = props_().getProperty('DEAL_HTML_DRIVE_ID');
+  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
+  var inline = props_().getProperty('DEAL_HTML');
+  if (inline) return inline;
+  if (typeof defaultDealHtml_ === 'function') return defaultDealHtml_();
+  throw new Error('No deal HTML body — paste DealFollowupBodies.gs or set DEAL_HTML');
 }
