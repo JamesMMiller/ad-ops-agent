@@ -310,6 +310,77 @@ def wait_for_video_processing(video_id, max_wait=360):
     return resp.json().get("picture")
 
 
+def list_ads(adset_id, status_filter=None):
+    """List ads in an ad set. Returns [{id, name, status, effective_status}, ...].
+
+    status_filter: optional list of effective_status values to keep
+    (e.g. ["ACTIVE"]). When None, returns all ads.
+    """
+    url = f"{BASE_URL}/{adset_id}/ads"
+    params = {
+        "access_token": get_access_token(),
+        "fields": "id,name,status,effective_status",
+        "limit": 100,
+    }
+    ads = []
+    while url:
+        resp = requests.get(url, params=params, timeout=60)
+        data = resp.json()
+        if "error" in data:
+            raise RuntimeError(f"list_ads error: {json.dumps(data['error'])}")
+        ads.extend(data.get("data", []))
+        url = data.get("paging", {}).get("next")
+        params = None
+    if status_filter is not None:
+        allowed = set(status_filter)
+        ads = [a for a in ads if a.get("effective_status") in allowed]
+    return ads
+
+
+def get_adset(adset_id):
+    """Fetch ad set id + name."""
+    url = f"{BASE_URL}/{adset_id}"
+    resp = requests.get(
+        url,
+        params={"access_token": get_access_token(), "fields": "id,name,status"},
+        timeout=60,
+    )
+    data = resp.json()
+    if "error" in data:
+        raise RuntimeError(f"get_adset error: {json.dumps(data['error'])}")
+    return data
+
+
+def set_ad_status(ad_id, status):
+    """Set an ad's status (PAUSED or ACTIVE). Returns True on success.
+
+    Prefer PAUSED for iteration cuts. Do not call with ACTIVE unless the user
+    explicitly asked to un-pause.
+    """
+    if status not in ("PAUSED", "ACTIVE"):
+        raise ValueError(f"status must be PAUSED or ACTIVE, got {status!r}")
+    url = f"{BASE_URL}/{ad_id}"
+    for attempt in range(1, 5):
+        resp = requests.post(
+            url,
+            data={"access_token": get_access_token(), "status": status},
+            timeout=60,
+        )
+        data = resp.json()
+        if data.get("success") is True or ("error" not in data and resp.status_code == 200):
+            print(f"  Set ad {ad_id} → {status}")
+            return True
+        err = data.get("error") or {}
+        if err.get("is_transient") and attempt < 4:
+            backoff = min(60, 5 * (2 ** (attempt - 1)))
+            print(f"  Transient error pausing {ad_id}. Retry {attempt}/4 in {backoff}s.")
+            time.sleep(backoff)
+            continue
+        print(f"  ERROR set_ad_status {ad_id}: {json.dumps(err or data, indent=2)}")
+        return False
+    return False
+
+
 def create_ad(adset_id, ad_name, creative, status="PAUSED", pixel_id=None):
     """Create an ad in an ad set. Retries transient OAuthException errors.
 
