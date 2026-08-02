@@ -12,6 +12,7 @@
 - **Journey blog:** `.claude/skills/blog-writing/SKILL.md` — `blog/posts/` source + Hashnode draft-first publish (`check-hashnode-env.sh`).
 - **Store inbox:** `.claude/skills/store-inbox/SKILL.md` — `hello@` + Gmail Apps Script triage (ImprovMX / FAQ / DEAL / escalate). Deal bodies: `https://ourtechaccessories.com/pages/inbox-deal`.
 - **Google Apps Script (generic):** `.claude/skills/google-apps-script/SKILL.md` — author/install `.gs` helpers (mailbox guard, properties, triggers).
+- **Profit ops:** `.claude/skills/profit-ops/SKILL.md` — interpret Profit Admin snapshots/reports; recommend scale/kill/creative/COGS next steps. Digest: `python3 shared/skills/profit-ops/scripts/summarize_snapshot.py`.
 - **Meta ads:** `.claude/skills/meta-ad-builder/SKILL.md` (optional). Ad Library research browser: `reference/ad-library-research.md`.
 - **Meta video default:** `1:1` for creatives that must run on Instagram + Facebook feed.
 - **Cost disclosure:** Always present credit totals as **estimates**. Confirm on [kie.ai/pricing](https://kie.ai/pricing) / [kie.ai/logs](https://kie.ai/logs).
