@@ -21,6 +21,18 @@ def snapshots_dir() -> Path:
     return d
 
 
+def views_dir() -> Path:
+    d = ROOT / "outputs" / "profit-admin" / "views"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def reports_dir() -> Path:
+    d = ROOT / "outputs" / "profit-admin" / "reports"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def kie_log_path() -> Path:
     return ROOT / "logs" / "kie-api.jsonl"
 

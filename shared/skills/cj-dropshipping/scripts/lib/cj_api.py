@@ -233,3 +233,44 @@ def flatten_list_v2(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if not out and isinstance(data.get("list"), list):
         out = data["list"]
     return out
+
+
+def list_orders(
+    *,
+    page_num: int = 1,
+    page_size: int = 50,
+    status: str | None = None,
+) -> dict[str, Any]:
+    """List shopping orders (includes postageAmount / productAmount in USD)."""
+    return cj_get(
+        "/v1/shopping/order/list",
+        {
+            "pageNum": page_num,
+            "pageSize": page_size,
+            "status": status,
+        },
+    )
+
+
+def list_all_orders(*, page_size: int = 50, max_pages: int = 40) -> list[dict[str, Any]]:
+    """Paginate CJ order list until empty or max_pages."""
+    out: list[dict[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        payload = list_orders(page_num=page, page_size=page_size)
+        data = payload.get("data") or {}
+        chunk = list(data.get("list") or [])
+        if not chunk:
+            break
+        out.extend(chunk)
+        total = int(data.get("total") or 0)
+        if total and len(out) >= total:
+            break
+        if len(chunk) < page_size:
+            break
+    return out
+
+
+def get_order_detail(order_id: str) -> dict[str, Any]:
+    """Order detail — orderId may be CJ id or store order number (e.g. #1011)."""
+    payload = cj_get("/v1/shopping/order/getOrderDetail", {"orderId": order_id})
+    return payload.get("data") or {}
