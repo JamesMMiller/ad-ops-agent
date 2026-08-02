@@ -183,7 +183,12 @@ def get_product_detail(product_id: str) -> dict[str, Any]:
         descriptionHtml
         seo { title description }
         featuredImage { url altText }
-        options { id name values }
+        options {
+          id
+          name
+          values
+          optionValues { id name }
+        }
         media(first: 50) {
           nodes {
             ... on MediaImage {
@@ -193,7 +198,7 @@ def get_product_detail(product_id: str) -> dict[str, Any]:
             }
           }
         }
-        variants(first: 50) {
+        variants(first: 250) {
           nodes {
             id
             title
@@ -289,6 +294,9 @@ def update_product(
     seo_title: str | None = None,
     seo_description: str | None = None,
     template_suffix: str | None = None,
+    product_type: str | None = None,
+    vendor: str | None = None,
+    tags: list[str] | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     input_obj: dict[str, Any] = {"id": product_id}
@@ -305,16 +313,306 @@ def update_product(
     if template_suffix is not None:
         # Empty string clears suffix back to default product.json
         input_obj["templateSuffix"] = template_suffix
+    if product_type is not None:
+        input_obj["productType"] = product_type
+    if vendor is not None:
+        input_obj["vendor"] = vendor
+    if tags is not None:
+        input_obj["tags"] = tags
 
     q = """
     mutation productUpdate($input: ProductInput!) {
       productUpdate(input: $input) {
-        product { id title handle descriptionHtml templateSuffix }
+        product {
+          id title handle descriptionHtml templateSuffix productType vendor tags
+        }
         userErrors { field message }
       }
     }
     """
     return graphql(q, {"input": input_obj}, dry_run=dry_run)
+
+
+def rename_product_options(
+    product_id: str,
+    option_renames: dict[str, Any],
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """
+    option_renames shape (from project.json):
+      {
+        "names": {"Applicable Model": "Phone model", "Color": "Colour"},
+        "values": {"Applicable Model": {"IPhone16Pro": "iPhone 16 Pro", ...}}
+      }
+    Or legacy flat colour map: {"Gun Color": "Gunmetal"} applied to values of option named Color.
+    """
+    detail = get_product_detail(product_id)
+    options = detail.get("options") or []
+    names_map = dict(option_renames.get("names") or {})
+    values_by_option = dict(option_renames.get("values") or {})
+
+    # Legacy flat map (qi2-folding-charger style): treat as Color/Colour value renames
+    legacy_keys = [k for k in option_renames.keys() if k not in ("names", "values")]
+    if legacy_keys:
+        colour_key = next(
+            (o["name"] for o in options if o.get("name") in ("Color", "Colour")),
+            "Color",
+        )
+        values_by_option.setdefault(colour_key, {}).update(
+            {k: option_renames[k] for k in legacy_keys}
+        )
+
+    q = """
+    mutation productOptionUpdate(
+      $productId: ID!
+      $option: OptionUpdateInput!
+      $optionValuesToUpdate: [OptionValueUpdateInput!]
+    ) {
+      productOptionUpdate(
+        productId: $productId
+        option: $option
+        optionValuesToUpdate: $optionValuesToUpdate
+      ) {
+        product {
+          id
+          options { id name optionValues { id name } }
+        }
+        userErrors { field message code }
+      }
+    }
+    """
+    results: list[dict[str, Any]] = []
+    for opt in options:
+        old_name = opt.get("name") or ""
+        new_name = names_map.get(old_name, old_name)
+        value_map = values_by_option.get(old_name) or values_by_option.get(new_name) or {}
+        option_values = opt.get("optionValues") or []
+        # Fallback: synthesize from values[] strings if optionValues missing
+        if not option_values and opt.get("values"):
+            option_values = [{"id": None, "name": v} for v in opt["values"]]
+
+        to_update = []
+        for ov in option_values:
+            old_val = ov.get("name") or ""
+            new_val = value_map.get(old_val)
+            if new_val and new_val != old_val and ov.get("id"):
+                to_update.append({"id": ov["id"], "name": new_val})
+
+        if new_name == old_name and not to_update:
+            continue
+
+        option_input: dict[str, Any] = {"id": opt["id"]}
+        if new_name != old_name:
+            option_input["name"] = new_name
+
+        results.append(
+            graphql(
+                q,
+                {
+                    "productId": product_id,
+                    "option": option_input,
+                    "optionValuesToUpdate": to_update or None,
+                },
+                dry_run=dry_run,
+            )
+        )
+    return {"updates": results, "count": len(results)}
+
+
+def ensure_collection(
+    *,
+    title: str,
+    handle: str,
+    description_html: str = "",
+    template_suffix: str | None = None,
+    product_ids: list[str] | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Create collection if missing, else update products/template/description."""
+    q_find = """
+    query ($q: String!) {
+      collections(first: 5, query: $q) {
+        nodes { id handle title templateSuffix }
+      }
+    }
+    """
+    found = graphql(q_find, {"q": f"handle:{handle}"})
+    nodes = (((found.get("data") or {}).get("collections") or {}).get("nodes")) or []
+    existing = next((n for n in nodes if n.get("handle") == handle), None)
+
+    if existing:
+        coll_id = existing["id"]
+        mut = """
+        mutation collectionUpdate($input: CollectionInput!) {
+          collectionUpdate(input: $input) {
+            collection { id handle title templateSuffix productsCount { count } }
+            userErrors { field message }
+          }
+        }
+        """
+        inp: dict[str, Any] = {"id": coll_id}
+        # Only patch fields the caller explicitly wants to change
+        if title and title != existing.get("title"):
+            inp["title"] = title
+        if description_html:
+            inp["descriptionHtml"] = description_html
+        if template_suffix is not None and template_suffix != existing.get(
+            "templateSuffix"
+        ):
+            inp["templateSuffix"] = template_suffix
+        if product_ids:
+            inp["products"] = product_ids
+        if len(inp) == 1:
+            return {
+                "data": {
+                    "collectionUpdate": {
+                        "collection": existing,
+                        "userErrors": [],
+                    }
+                },
+                "skipped": True,
+                "reason": "no collection fields to patch",
+            }
+        return graphql(mut, {"input": inp}, dry_run=dry_run)
+
+    mut = """
+    mutation collectionCreate($input: CollectionInput!) {
+      collectionCreate(input: $input) {
+        collection { id handle title templateSuffix }
+        userErrors { field message }
+      }
+    }
+    """
+    inp = {
+        "title": title,
+        "handle": handle,
+        "descriptionHtml": description_html,
+    }
+    if template_suffix is not None:
+        inp["templateSuffix"] = template_suffix
+    if product_ids:
+        inp["products"] = product_ids
+    return graphql(mut, {"input": inp}, dry_run=dry_run)
+
+
+def collection_add_products(
+    collection_id: str,
+    product_ids: list[str],
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    q = """
+    mutation collectionAddProducts($id: ID!, $productIds: [ID!]!) {
+      collectionAddProducts(id: $id, productIds: $productIds) {
+        collection { id handle productsCount { count } }
+        userErrors { field message }
+      }
+    }
+    """
+    return graphql(
+        q, {"id": collection_id, "productIds": product_ids}, dry_run=dry_run
+    )
+
+
+def add_menu_item_if_missing(
+    *,
+    menu_handle: str = "main-menu",
+    title: str,
+    url: str,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Best-effort: append a top-level link to an Online Store menu if not present."""
+    q = """
+    query {
+      menus(first: 20) {
+        nodes {
+          id
+          handle
+          title
+          items {
+            id
+            title
+            url
+            items { id title url }
+          }
+        }
+      }
+    }
+    """
+    data = graphql(q)
+    menus = (((data.get("data") or {}).get("menus") or {}).get("nodes")) or []
+    menu = next((m for m in menus if m.get("handle") == menu_handle), None)
+    if not menu:
+        return {"skipped": True, "reason": f"menu {menu_handle!r} not found"}
+
+    def _has(items: list) -> bool:
+        for it in items or []:
+            if (it.get("url") or "").rstrip("/") == url.rstrip("/"):
+                return True
+            if (it.get("title") or "").lower() == title.lower():
+                return True
+            if _has(it.get("items") or []):
+                return True
+        return False
+
+    if _has(menu.get("items") or []):
+        return {"skipped": True, "reason": "already present", "menuId": menu["id"]}
+
+    # Rebuild items + append (MenuUpdateInput uses items nested structure)
+    def _map_item(it: dict[str, Any]) -> dict[str, Any]:
+        mapped: dict[str, Any] = {
+            "title": it.get("title") or "",
+            "type": it.get("type") or "HTTP",
+        }
+        if it.get("url"):
+            mapped["url"] = it["url"]
+        if it.get("resourceId"):
+            mapped["resourceId"] = it["resourceId"]
+        kids = it.get("items") or []
+        if kids:
+            mapped["items"] = [_map_item(k) for k in kids]
+        return mapped
+
+    # Need type on existing items — re-query with type fields
+    q2 = """
+    query ($id: ID!) {
+      menu(id: $id) {
+        id
+        title
+        items {
+          title
+          type
+          url
+          resourceId
+          items {
+            title
+            type
+            url
+            resourceId
+            items { title type url resourceId }
+          }
+        }
+      }
+    }
+    """
+    menu2 = (((graphql(q2, {"id": menu["id"]}).get("data") or {}).get("menu")) or menu)
+    items = [_map_item(it) for it in (menu2.get("items") or [])]
+    items.append({"title": title, "type": "HTTP", "url": url})
+
+    mut = """
+    mutation menuUpdate($id: ID!, $title: String!, $items: [MenuItemUpdateInput!]!) {
+      menuUpdate(id: $id, title: $title, items: $items) {
+        menu { id handle }
+        userErrors { field message }
+      }
+    }
+    """
+    return graphql(
+        mut,
+        {"id": menu["id"], "title": menu.get("title") or "Main menu", "items": items},
+        dry_run=dry_run,
+    )
 
 
 # Standard custom.* PRODUCT metafield pack (see prompting/metafields.md)

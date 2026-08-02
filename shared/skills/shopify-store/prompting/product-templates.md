@@ -6,6 +6,7 @@
 |--------------|-------------------|------|
 | Default | _(empty)_ | Simple single-SKU / no special gallery needs |
 | **Tech accessory** | `tech-accessory` | Multi-colour accessories; stronger gallery + swatches + sticky ATC |
+| **Phone case** | `phone-case` | MagSafe / magnetic cases: model + colour picker, Qi2 strip, inline compat checker. Collection: `collection.phone-cases` + `qi2-compat-checker` section |
 | **Bulk pack** | `bulk-pack` | Volume / mix-and-match (“buy more, save more” + per-line colour slots). Full guide: [bulk-pack.md](bulk-pack.md) |
 | Legacy GaN pack | `gan-pack` | Existing GaN charger only — new volume SKUs use **`bulk-pack`** |
 
@@ -17,6 +18,8 @@
 |------|------------------|
 | `templates/product.json` | _(empty)_ |
 | `templates/product.tech-accessory.json` | `tech-accessory` |
+| `templates/product.phone-case.json` | `phone-case` (+ `snippets/phone-case-picker.liquid`) |
+| `templates/collection.phone-cases.json` | collection suffix `phone-cases` (+ `sections/qi2-compat-checker.liquid`) |
 | `templates/product.bulk-pack.json` | `bulk-pack` |
 | `templates/product.gan-pack.json` | `gan-pack` (legacy) |
 
