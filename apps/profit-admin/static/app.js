@@ -13,7 +13,9 @@ const pct = (n) => (n == null ? "—" : `${Math.round(n * 100)}%`);
 let snapshot = null;
 let chart = null;
 let productChart = null;
+let subsetChart = null;
 let selectedProductKey = null;
+let subsetResult = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -268,49 +270,6 @@ function destroyProductChart() {
   }
 }
 
-function renderProductChart(rows) {
-  destroyProductChart();
-  const canvas = el("product-chart");
-  if (!rows || !rows.length || !canvas) return;
-
-  const sorted = [...rows].sort((a, b) => b.contrib - a.contrib);
-  productChart = new Chart(canvas.getContext("2d"), {
-    type: "bar",
-    data: {
-      labels: sorted.map((r) => r.product),
-      datasets: [
-        {
-          label: "Contribution (£)",
-          data: sorted.map((r) => r.contrib),
-          backgroundColor: sorted.map((r) =>
-            r.contrib >= 0 ? "rgba(6, 118, 71, 0.75)" : "rgba(180, 35, 24, 0.75)",
-          ),
-        },
-      ],
-    },
-    options: {
-      indexAxis: "y",
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: { display: false },
-        title: {
-          display: true,
-          text: "Contribution by product (pre ads / KIE)",
-          align: "start",
-          color: "#6b6b6b",
-          font: { size: 12, weight: "500" },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { callback: (v) => `£${v}` },
-        },
-      },
-    },
-  });
-}
-
 function destroyChart() {
   if (chart) {
     chart.destroy();
@@ -318,16 +277,62 @@ function destroyChart() {
   }
 }
 
-function renderChart(view, days) {
-  destroyChart();
-  const labels = days.map((d) => d.label);
-  const ctx = el("main-chart").getContext("2d");
-  const title = el("chart-title");
-  const note = el("chart-note");
+const MAIN_CHART_VIEWS = ["cumPnl", "cumRevCost", "dailyStack", "mer"];
+window.MAIN_CHART_VIEWS = MAIN_CHART_VIEWS;
 
+function zeroLinePlugin() {
+  return {
+    id: "zeroLine",
+    afterDraw(c) {
+      const y = c.scales.y;
+      const x = c.scales.x;
+      if (!y || y.min > 0 || y.max < 0) return;
+      const yp = y.getPixelForValue(0);
+      const { ctx: g } = c;
+      g.save();
+      g.strokeStyle = "#067647";
+      g.setLineDash([4, 4]);
+      g.beginPath();
+      g.moveTo(x.left, yp);
+      g.lineTo(x.right, yp);
+      g.stroke();
+      g.restore();
+    },
+  };
+}
+
+function merGuidesPlugin() {
+  return {
+    id: "merGuides",
+    afterDraw(c) {
+      const y = c.scales.y;
+      const x = c.scales.x;
+      const { ctx: g } = c;
+      const draw = (val, color) => {
+        if (val < y.min || val > y.max) return;
+        const yp = y.getPixelForValue(val);
+        g.save();
+        g.strokeStyle = color;
+        g.setLineDash([4, 4]);
+        g.beginPath();
+        g.moveTo(x.left, yp);
+        g.lineTo(x.right, yp);
+        g.stroke();
+        g.restore();
+      };
+      draw(2.0, "#067647");
+      draw(1.5, "#b54708");
+    },
+  };
+}
+
+/** Build Chart.js config + labels for a main P&L chart view. */
+function mainChartSpec(view, days) {
+  const labels = days.map((d) => d.label);
   const common = {
-    responsive: true,
-    maintainAspectRatio: true,
+    responsive: false,
+    animation: false,
+    maintainAspectRatio: false,
     plugins: {
       legend: { display: true, position: "bottom" },
     },
@@ -336,11 +341,16 @@ function renderChart(view, days) {
     },
   };
 
+  const C = (key, fallback) =>
+    typeof window.paConcept === "function" ? window.paConcept(key, fallback) : fallback;
+
   if (view === "cumPnl") {
-    title.textContent = "Cumulative estimated P&L";
-    note.textContent =
-      "Revenue − landed COGS − fees − Meta − KIE − amortised Shopify Basic. £0 = break-even.";
-    chart = new Chart(ctx, {
+    return {
+      title: "Cumulative estimated P&L",
+      note: C(
+        "CHART_CUM_PNL",
+        "Running profit/loss: revenue − landed COGS − fees − Meta − KIE − Shopify slice. £0 = break-even.",
+      ),
       type: "line",
       data: {
         labels,
@@ -357,10 +367,6 @@ function renderChart(view, days) {
       },
       options: {
         ...common,
-        plugins: {
-          ...common.plugins,
-          annotation: undefined,
-        },
         scales: {
           y: {
             beginAtZero: false,
@@ -368,35 +374,17 @@ function renderChart(view, days) {
           },
         },
       },
-      plugins: [
-        {
-          id: "zeroLine",
-          afterDraw(c) {
-            const y = c.scales.y;
-            const x = c.scales.x;
-            if (!y || y.min > 0 || y.max < 0) return;
-            const yp = y.getPixelForValue(0);
-            const { ctx: g } = c;
-            g.save();
-            g.strokeStyle = "#067647";
-            g.setLineDash([4, 4]);
-            g.beginPath();
-            g.moveTo(x.left, yp);
-            g.lineTo(x.right, yp);
-            g.stroke();
-            g.restore();
-          },
-        },
-      ],
-    });
-    return;
+      plugins: [zeroLinePlugin()],
+    };
   }
 
   if (view === "cumRevCost") {
-    title.textContent = "Cumulative revenue vs total costs";
-    note.textContent =
-      "Costs include COGS, fees, Meta, KIE, and daily Shopify slice. Profit when green overtakes red.";
-    chart = new Chart(ctx, {
+    return {
+      title: "Cumulative revenue vs total costs",
+      note: C(
+        "CHART_REV_COST",
+        "Green = cumulative revenue; red = cumulative costs. Profit when green stays above red.",
+      ),
       type: "line",
       data: {
         labels,
@@ -423,14 +411,17 @@ function renderChart(view, days) {
         ...common,
         scales: { y: { beginAtZero: true, ticks: { callback: (v) => `£${v}` } } },
       },
-    });
-    return;
+      plugins: [],
+    };
   }
 
   if (view === "dailyStack") {
-    title.textContent = "Daily cost stack";
-    note.textContent = "Composition of spend each day (stacked).";
-    chart = new Chart(ctx, {
+    return {
+      title: "Daily cost stack",
+      note: C(
+        "CHART_DAILY_STACK",
+        "Each bar is one day’s cost mix: landed COGS, Meta, KIE, and fees + Shopify.",
+      ),
       type: "bar",
       data: {
         labels,
@@ -455,9 +446,7 @@ function renderChart(view, days) {
           },
           {
             label: "Fees + Shopify",
-            data: days.map((d) =>
-              Math.round((d.fees + d.shopify) * 100) / 100,
-            ),
+            data: days.map((d) => Math.round((d.fees + d.shopify) * 100) / 100),
             backgroundColor: "#6b6b6b",
             stack: "c",
           },
@@ -474,15 +463,17 @@ function renderChart(view, days) {
           },
         },
       },
-    });
-    return;
+      plugins: [],
+    };
   }
 
   if (view === "mer") {
-    title.textContent = "Trailing 3-day MER";
-    note.textContent =
-      "Store revenue ÷ Meta spend over a 3-day window. ~2.0x is a healthy target after COGS.";
-    chart = new Chart(ctx, {
+    return {
+      title: "Trailing 3-day MER",
+      note: C(
+        "CHART_MER",
+        "Store revenue ÷ Meta spend (3-day window). Not Meta ROAS. ~2.0× healthy after COGS.",
+      ),
       type: "line",
       data: {
         labels,
@@ -507,31 +498,384 @@ function renderChart(view, days) {
           },
         },
       },
-      plugins: [
+      plugins: [merGuidesPlugin()],
+    };
+  }
+
+  return null;
+}
+window.mainChartSpec = mainChartSpec;
+
+function productChartSpec(rows) {
+  if (!rows || !rows.length) return null;
+  const sorted = [...rows].sort((a, b) => b.contrib - a.contrib);
+  return {
+    title: "Contribution by product (pre ads / KIE)",
+    note:
+      typeof window.paConcept === "function"
+        ? window.paConcept(
+            "CHART_PRODUCT_CONTRIB",
+            "Contribution before Meta and KIE — positive bars fund ads; not full P&L.",
+          )
+        : "Contribution before Meta and KIE — positive bars fund ads; not full P&L.",
+    type: "bar",
+    data: {
+      labels: sorted.map((r) => r.product),
+      datasets: [
         {
-          id: "merGuides",
-          afterDraw(c) {
-            const y = c.scales.y;
-            const x = c.scales.x;
-            const { ctx: g } = c;
-            const draw = (val, color) => {
-              if (val < y.min || val > y.max) return;
-              const yp = y.getPixelForValue(val);
-              g.save();
-              g.strokeStyle = color;
-              g.setLineDash([4, 4]);
-              g.beginPath();
-              g.moveTo(x.left, yp);
-              g.lineTo(x.right, yp);
-              g.stroke();
-              g.restore();
-            };
-            draw(2.0, "#067647");
-            draw(1.5, "#b54708");
-          },
+          label: "Contribution (£)",
+          data: sorted.map((r) => r.contrib),
+          backgroundColor: sorted.map((r) =>
+            r.contrib >= 0 ? "rgba(6, 118, 71, 0.75)" : "rgba(180, 35, 24, 0.75)",
+          ),
         },
       ],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: false,
+      animation: false,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          ticks: { callback: (v) => `£${v}` },
+        },
+      },
+    },
+    plugins: [],
+  };
+}
+
+function renderChart(view, days) {
+  destroyChart();
+  const spec = mainChartSpec(view, days);
+  if (!spec) return;
+  const title = el("chart-title");
+  const note = el("chart-note");
+  if (title) title.textContent = spec.title;
+  if (note) note.textContent = spec.note;
+  const ctx = el("main-chart").getContext("2d");
+  chart = new Chart(ctx, {
+    type: spec.type,
+    data: spec.data,
+    options: {
+      ...spec.options,
+      responsive: true,
+      maintainAspectRatio: true,
+      animation: false,
+    },
+    plugins: spec.plugins,
+  });
+}
+
+function renderProductChart(rows) {
+  destroyProductChart();
+  const canvas = el("product-chart");
+  const spec = productChartSpec(rows);
+  if (!spec || !canvas) return;
+  productChart = new Chart(canvas.getContext("2d"), {
+    type: spec.type,
+    data: spec.data,
+    options: {
+      ...spec.options,
+      responsive: true,
+      maintainAspectRatio: true,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: spec.title,
+          align: "start",
+          color: "#6b6b6b",
+          font: { size: 12, weight: "500" },
+        },
+      },
+    },
+    plugins: spec.plugins,
+  });
+}
+
+function setPnlExportEnabled(on) {
+  const btn = el("btn-pnl-export");
+  if (btn) btn.disabled = !on;
+}
+
+function canvasToWhitePng(canvas) {
+  if (!canvas || typeof canvas.toDataURL !== "function") return null;
+  try {
+    const tmp = document.createElement("canvas");
+    tmp.width = canvas.width;
+    tmp.height = canvas.height;
+    const ctx = tmp.getContext("2d");
+    if (!ctx) return canvas.toDataURL("image/png");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, tmp.width, tmp.height);
+    ctx.drawImage(canvas, 0, 0);
+    return tmp.toDataURL("image/png");
+  } catch (_) {
+    return null;
+  }
+}
+
+function renderSpecToPng(spec, width, height) {
+  if (!spec) return null;
+  const host = document.createElement("div");
+  host.style.cssText =
+    "position:fixed;left:-10000px;top:0;width:" +
+    width +
+    "px;height:" +
+    height +
+    "px;pointer-events:none;opacity:0;";
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  host.appendChild(canvas);
+  document.body.appendChild(host);
+  let instance = null;
+  try {
+    instance = new Chart(canvas.getContext("2d"), {
+      type: spec.type,
+      data: spec.data,
+      options: {
+        ...spec.options,
+        responsive: false,
+        animation: false,
+        maintainAspectRatio: false,
+      },
+      plugins: spec.plugins || [],
     });
+    return canvasToWhitePng(canvas);
+  } catch (_) {
+    return null;
+  } finally {
+    if (instance) instance.destroy();
+    host.remove();
+  }
+}
+
+function captureAllChartsForExport() {
+  const days = snapshot?.pnl?.days || [];
+  const charts = [];
+  for (const view of MAIN_CHART_VIEWS) {
+    const spec = mainChartSpec(view, days);
+    if (!spec || !days.length) continue;
+    const png = renderSpecToPng(spec, 1100, 420);
+    if (!png) continue;
+    charts.push({ title: spec.title, note: spec.note, png });
+  }
+  const productSpec = productChartSpec(snapshot?.product_pnl || []);
+  if (productSpec) {
+    const rows = productSpec.data.labels.length;
+    const height = Math.max(320, 48 + rows * 28);
+    const png = renderSpecToPng(productSpec, 1100, height);
+    if (png) {
+      charts.push({
+        title: productSpec.title,
+        note: productSpec.note,
+        png,
+      });
+    }
+  }
+  const subDays = subsetResult?.days || [];
+  if (subDays.length) {
+    const label = subsetResult.label || "Subset";
+    const from = subsetResult.start_date || "";
+    for (const view of MAIN_CHART_VIEWS) {
+      const spec = mainChartSpec(view, subDays);
+      if (!spec) continue;
+      const png = renderSpecToPng(spec, 1100, 420);
+      if (!png) continue;
+      charts.push({
+        title: `Subset · ${spec.title}${from ? ` · from ${from}` : ""}`,
+        note: `${label}. ${subsetResult.note || spec.note || ""}`,
+        png,
+      });
+    }
+  }
+  return charts;
+}
+
+function destroySubsetChart() {
+  if (subsetChart) {
+    subsetChart.destroy();
+    subsetChart = null;
+  }
+}
+
+function readSubsetSelection() {
+  // Shared Scope: Meta tree + SKUs from ads.js
+  const skus =
+    typeof window.selectedAdsSkus === "function" ? window.selectedAdsSkus() : [];
+  const campaign_ids =
+    typeof window.checkedAdsIds === "function"
+      ? window.checkedAdsIds("ads-camp")
+      : [];
+  const adset_ids =
+    typeof window.checkedAdsIds === "function"
+      ? window.checkedAdsIds("ads-adset")
+      : [];
+  return { skus, handles: [], campaign_ids, adset_ids };
+}
+
+function renderSubsetChart(view, days) {
+  destroySubsetChart();
+  const canvas = el("subset-chart");
+  const spec = mainChartSpec(view, days);
+  if (!spec || !canvas) return;
+  const title = el("subset-chart-title");
+  const note = el("subset-chart-note");
+  const from = subsetResult?.start_date;
+  if (title) {
+    title.textContent = from ? `${spec.title} · from ${from}` : spec.title;
+  }
+  if (note) {
+    note.textContent = subsetResult?.note
+      ? `${spec.note} ${subsetResult.note}`
+      : spec.note;
+  }
+  subsetChart = new Chart(canvas.getContext("2d"), {
+    type: spec.type,
+    data: spec.data,
+    options: {
+      ...spec.options,
+      responsive: true,
+      maintainAspectRatio: true,
+      animation: false,
+    },
+    plugins: spec.plugins,
+  });
+}
+
+function renderSubsetResults(data) {
+  subsetResult = data;
+  const box = el("subset-results");
+  if (!box) return;
+  box.hidden = false;
+  const t = data.totals || {};
+  const pnl = t.cum_pnl;
+  const pnlCls = pnl == null ? "" : pnl >= 0 ? "success" : "danger";
+  const mer = t.mer3d;
+  const merCls =
+    mer == null ? "" : mer >= 2 ? "success" : mer >= 1.5 ? "warning" : "danger";
+  const startSrc = data.selection?.start_source?.name;
+  el("subset-stats").innerHTML = `
+    <div class="stat"><div class="stat-value">${money(t.revenue, 0)}</div><div class="stat-label">SKU revenue</div></div>
+    <div class="stat"><div class="stat-value">${money(t.meta_spend, 0)}</div><div class="stat-label">Selected ads</div></div>
+    <div class="stat"><div class="stat-value ${merCls}">${
+      mer == null ? "—" : mer.toFixed(2) + "x"
+    }</div><div class="stat-label">Trailing 3-day MER</div></div>
+    <div class="stat"><div class="stat-value ${pnlCls}">${money(
+      pnl,
+      0,
+    )}</div><div class="stat-label">Cum P&amp;L (subset)</div></div>
+  `;
+  const note = el("subset-note");
+  if (note) {
+    note.textContent = [
+      data.label || "Subset",
+      data.start_date ? `from ${data.start_date}` : null,
+      startSrc ? `start ad set: ${startSrc}` : null,
+      t.units != null ? `${t.units} units` : null,
+      t.store_mer != null ? `MER ${t.store_mer}x` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (data.warnings?.length) showWarnings(data.warnings);
+  const view = el("subset-chart-view")?.value || "cumPnl";
+  renderSubsetChart(view, data.days || []);
+}
+
+function clearSubsetResults() {
+  subsetResult = null;
+  destroySubsetChart();
+  const box = el("subset-results");
+  if (box) box.hidden = true;
+  const stats = el("subset-stats");
+  if (stats) stats.innerHTML = "";
+}
+
+async function applySubset() {
+  const sel = readSubsetSelection();
+  if (!sel.skus.length && !sel.handles.length) {
+    throw new Error("Select at least one SKU in Scope for the subset graph.");
+  }
+  if (!sel.adset_ids.length && !sel.campaign_ids.length) {
+    throw new Error("Select at least one Meta ad set (or campaign) in Scope.");
+  }
+  const data = await api("/api/pnl/subset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sel),
+  });
+  renderSubsetResults(data);
+  return data;
+}
+
+window.applySubset = applySubset;
+
+function initSubsetUi() {
+  el("subset-chart-view")?.addEventListener("change", () => {
+    if (subsetResult?.days) {
+      renderSubsetChart(el("subset-chart-view").value, subsetResult.days);
+    }
+  });
+}
+
+async function exportPnlPdf() {
+  if (!snapshot?.pnl) {
+    showWarnings(["Refresh the P&L before exporting."]);
+    return;
+  }
+  const btn = el("btn-pnl-export");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Exporting…";
+  }
+  try {
+    const charts = captureAllChartsForExport();
+    const res = await fetch("/api/pnl/export", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/pdf",
+      },
+      body: JSON.stringify({
+        snapshot,
+        charts,
+      }),
+    });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        const body = await res.json();
+        detail = body.detail || JSON.stringify(body);
+      } catch (_) {}
+      throw new Error(detail);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    const match = /filename="([^"]+)"/.exec(cd);
+    const filename = match ? match[1] : "profit-admin-pnl.pdf";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    showWarnings([`PDF export failed: ${e.message}`]);
+  } finally {
+    if (btn) {
+      btn.textContent = "Export PDF";
+      btn.disabled = !snapshot?.pnl;
+    }
   }
 }
 
@@ -544,6 +888,7 @@ function renderAll(data) {
   renderProductTable(data.product_pnl || []);
   renderUnitTable(data.unit_economics || []);
   renderChart(el("chart-view").value, days);
+  setPnlExportEnabled(Boolean(data?.pnl));
 }
 
 async function loadLatest() {
@@ -562,17 +907,22 @@ async function doRefresh() {
   try {
     const data = await api("/api/refresh", { method: "POST" });
     renderAll(data);
+    if (typeof window.onDeskRefreshed === "function") {
+      await window.onDeskRefreshed();
+    }
   } catch (e) {
     showWarnings([`Refresh failed: ${e.message}`]);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Refresh";
+    btn.textContent = "Refresh data";
   }
 }
 
 el("btn-refresh").addEventListener("click", doRefresh);
+el("btn-pnl-export")?.addEventListener("click", exportPnlPdf);
 el("chart-view").addEventListener("change", () => {
   if (snapshot?.pnl?.days) renderChart(el("chart-view").value, snapshot.pnl.days);
 });
+initSubsetUi();
 
 loadLatest();

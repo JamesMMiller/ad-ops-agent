@@ -38,22 +38,89 @@ source ../../.venv-profit/bin/activate   # or your venv
 uvicorn app:app --reload --port 8787
 ```
 
-Open [http://localhost:8787](http://localhost:8787) → click **Refresh**.
+Open [http://localhost:8787](http://localhost:8787).
 
-Snapshots write to `outputs/profit-admin/snapshots/` (`latest.json` + timestamped files). That tree is gitignored via `outputs/`.
+The desk is a **single scrollable page** with optional sections (Desk KPIs, Daily, Product P&L, Unit economics, Subset, Ads, Ads profitability, Warehouse). Toggle sections, set shared **Scope** (dates / Meta / SKUs), then **Apply**.
+
+- **Refresh data** — pull Shopify / Meta / KIE into a new snapshot, then re-Apply enabled sections.
+- **Reload view** — rehydrate a saved view’s filters and re-Apply (no source pull).
+- **Save / Save as…** — persist filters + section toggles under `outputs/profit-admin/views/`.
+
+Snapshots write to `outputs/profit-admin/snapshots/` (`latest.json` + timestamped files). Saved views: `outputs/profit-admin/views/`. Ads Apply can pin JSON to `outputs/profit-admin/reports/`. That tree is gitignored via `outputs/`.
+
+### Agent skill — next steps from this data
+
+Use **`profit-ops`** (`shared/skills/profit-ops/SKILL.md`) to interpret snapshots / Ads+P&L reports in context of the Shopify store and Meta account, and get prioritized scale/kill/creative/COGS recommendations.
+
+```bash
+python3 shared/skills/profit-ops/scripts/summarize_snapshot.py \
+  --snapshot outputs/profit-admin/snapshots/latest.json \
+  --changelog MASTER_CONTEXT.md --markdown
+```
+
+The digest cross-references **MASTER_CONTEXT Changelog** dates with pre/post metric slices (effects often lag). Save Ads Apply JSON under `outputs/profit-admin/reports/` for multi-report packs; briefs under `outputs/profit-admin/briefs/`.
+
+## Concepts (in-app + exports)
+
+Section and chart footnotes explain MER vs Meta ROAS, contribution, Min ROAS / Max CPA, leaf-prefer, STORE vs SKU mode, overlay, and warehouse ROAS / POAS. Source of truth:
+
+- UI: `static/concepts.js` (loaded before `app.js` / `ads.js`)
+- PDFs: `concept_copy.py` (imported by `export_pnl_pdf.py` / `export_ads_pdf.py`)
+
+Keep those two files in sync when editing glossary copy.
 
 ## API
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/` | SPA |
+| `GET` | `/` | SPA (unified desk + optional sections) |
 | `GET` | `/api/health` | Connector readiness (no secrets) |
 | `POST` | `/api/refresh` | Pull all sources, save snapshot, return payload |
 | `GET` | `/api/snapshot/latest` | Last snapshot |
 | `GET` | `/api/snapshots` | List snapshot ids |
 | `GET` | `/api/snapshot/{id}` | One snapshot |
+| `GET` | `/api/views` | List saved desk views |
+| `GET` | `/api/views/{id}` | One saved view (filters/config only) |
+| `POST` | `/api/views` | Create view |
+| `PUT` | `/api/views/{id}` | Update view |
+| `DELETE` | `/api/views/{id}` | Delete view |
+| `GET` | `/api/catalog` | Shopify variants for SKU picker |
+| `GET` | `/api/warehouse/meta` | CJ warehouses, MOQ, transit defaults |
+| `GET` | `/api/warehouse/lanes/{wh}` | CN→warehouse stock lanes |
+| `GET` | `/api/meta/structure` | Campaigns + ad sets + ads for pickers |
+| `POST` | `/api/ads/performance` | Meta insights + P&L join (optional `skus` / `handles`; store mode if empty) |
+| `POST` | `/api/ads/pin` | Write Ads report JSON under `outputs/profit-admin/reports/` |
+| `POST` | `/api/ads/export` | PDF of Ads + profitability (report + chart images) |
+| `POST` | `/api/warehouse/past-performance` | Shopify product history + Meta insights for selected objects |
+| `POST` | `/api/warehouse/calculate` | 3PL cost projection + unit COGS (+ optional past performance) |
+| `POST` | `/api/pnl/subset` | Subset P&L days for selected SKUs + Meta ad sets (from earliest ad-set start) |
+| `POST` | `/api/pnl/export` | PDF of the P&L desk (snapshot + all chart images; includes active subset) |
+| `POST` | `/api/warehouse/export` | Excel (.xlsx) of the last calculation payload |
 
 Snapshot includes `pnl`, `unit_economics` (list-price theory), and `product_pnl` (actual sold-unit contribution by product, with variant + order dig-in).
+
+### Ads performance
+
+Enable **Ads performance** / **Ads profitability** sections. Scope provides campaigns, ad sets, and/or ads (search autocomplete + chips); optional product/SKU multi-select; date preset or custom range. **Apply** runs Insights + P&L join (and pins JSON under `reports/` when Apply/Reload succeeds).
+
+- **SKU mode** — when any SKUs are selected: product revenue/COGS/fees vs selected Meta spend (KIE / Shopify amortisation omitted).
+- **Store mode** — when no SKUs: whole-store P&L for the window (prefer latest Refresh snapshot; else live orders) with ads replaced by the selected Meta spend.
+
+Meta KPIs + charts (combined or overlay up to 12 objects), sortable breakdown table, profitability KPIs + P&L charts (cum P&L, rev vs costs, daily stack, 3-day MER). **Export Ads PDF** includes Meta + P&L sections. Leaf objects win when a parent and child are both ticked.
+
+### Warehouse planner
+
+Enable the **Warehouse planner** section. Models CJ 3PL fees from [cjdropshipping.com/service-fee](https://cjdropshipping.com/service-fee): inbound, labels, stock shipping CN→WH, storage by age band, outbound, plus editable last-mile postage and destination mix (UK/EU/US/CAN). Uses Scope SKUs when selected, or enter costs manually.
+
+- **Postage included / excluded** — include = free shipping in COGS & P&L; exclude = customer pays (matches P&L desk unit economics).
+- **Wholesale / dropship** — on (default): track inventory (qty, inbound, storage, restock, stockouts). Off: stock doesn’t matter — open demand at sell rate × horizon.
+- **Show past performance** — optional; Shopify sales for the selected SKU’s product plus Meta spend from ticked campaigns/ad sets. Landed COGS includes CJ `postageAmount` (USD→GBP) matched by Shopify order name. Combined ROAS / ROAS-after-COGS / POAS for reality check vs the planner.
+- **Daily ad spend (£)** — charged on days with stock (default); toggle off “Stop daily ads when stock is 0” to burn spend after stockout.
+- **Ad cost / purchase (£)** — optional; charged per unit sold (e.g. Meta CPA). Can be used with or instead of daily spend.
+- **Repeat restock** — optional (stock mode); add N units every M days (inbound fees each event; FIFO batch storage ages).
+- **Overall profit / loss** — revenue − product COGS − full inbound − storage − outbound − postage (if on) − checkout fees − ads.
+
+Figures are **estimates** — confirm live rates on CJ.
 
 **Do not expose this server publicly in v1** — there is no auth yet (`auth.py` is a Phase 2 stub).
 
