@@ -1753,6 +1753,26 @@ function applyDealTokens_(text, vars) {
   return out;
 }
 
+/**
+ * Templates use __GAN_BASE_PRICE__; the live /pages/inbox-deal Liquid usually
+ * substitutes before JSON. This covers offline fallbacks that still have the token.
+ */
+function withDealBasePrice_(text, basePrice) {
+  var out = String(text || '');
+  if (out.indexOf('__GAN_BASE_PRICE__') === -1) return out;
+  var price = String(basePrice || '').trim();
+  if (!price) {
+    return out
+      .split('£__GAN_BASE_PRICE__')
+      .join('the current single-item price')
+      .split('\u00a3__GAN_BASE_PRICE__')
+      .join('the current single-item price')
+      .split('__GAN_BASE_PRICE__')
+      .join('the current single-item price');
+  }
+  return out.split('__GAN_BASE_PRICE__').join(price);
+}
+
 function guessFirstName_(from) {
   var s = String(from || '').trim();
   var m = s.match(/^"?([^"<]+)"?\s*</);
@@ -1767,29 +1787,39 @@ function guessFirstName_(from) {
 
 function loadDealPlain_() {
   var inline = props_().getProperty('DEAL_PLAIN');
-  if (inline) return inline;
+  if (inline) return withDealBasePrice_(inline, '');
   var driveId = props_().getProperty('DEAL_PLAIN_DRIVE_ID');
-  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
+  if (driveId) {
+    return withDealBasePrice_(DriveApp.getFileById(driveId).getBlob().getDataAsString(), '');
+  }
   try {
-    return fetchDealBodies_().plain;
+    var bodies = fetchDealBodies_();
+    return withDealBasePrice_(bodies.plain, bodies.base_price);
   } catch (e) {
     Logger.log('Deal plain from website failed: ' + e);
   }
-  if (typeof defaultDealPlain_ === 'function') return defaultDealPlain_();
+  if (typeof defaultDealPlain_ === 'function') {
+    return withDealBasePrice_(defaultDealPlain_(), '');
+  }
   throw new Error('No deal plain body — set DEAL_BODIES_URL or paste DealFollowupBodies.gs');
 }
 
 function loadDealHtml_() {
   var inline = props_().getProperty('DEAL_HTML');
-  if (inline) return inline;
+  if (inline) return withDealBasePrice_(inline, '');
   var driveId = props_().getProperty('DEAL_HTML_DRIVE_ID');
-  if (driveId) return DriveApp.getFileById(driveId).getBlob().getDataAsString();
+  if (driveId) {
+    return withDealBasePrice_(DriveApp.getFileById(driveId).getBlob().getDataAsString(), '');
+  }
   try {
-    return fetchDealBodies_().html;
+    var bodies = fetchDealBodies_();
+    return withDealBasePrice_(bodies.html, bodies.base_price);
   } catch (e) {
     Logger.log('Deal HTML from website failed: ' + e);
   }
-  if (typeof defaultDealHtml_ === 'function') return defaultDealHtml_();
+  if (typeof defaultDealHtml_ === 'function') {
+    return withDealBasePrice_(defaultDealHtml_(), '');
+  }
   throw new Error('No deal HTML body — set DEAL_BODIES_URL or paste DealFollowupBodies.gs');
 }
 
@@ -1844,6 +1874,8 @@ function refreshDealBodiesCache() {
   Logger.log(
     'Deal bodies refreshed version=' +
       (data.version || '') +
+      ' base_price=' +
+      (data.base_price || '') +
       ' htmlChars=' +
       String(data.html).length +
       ' plainChars=' +

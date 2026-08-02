@@ -403,6 +403,9 @@ def main() -> int:
             seo_title=cfg.get("seo_title"),
             seo_description=cfg.get("seo_description"),
             template_suffix=cfg.get("template_suffix"),
+            product_type=cfg.get("product_type"),
+            vendor=cfg.get("vendor"),
+            tags=cfg.get("tags"),
             dry_run=not actually_live,
         )
         api.dump_json(out_dir / "live-update-result.json", live_result)
@@ -410,6 +413,18 @@ def main() -> int:
             "Live product update:",
             "DRY-RUN" if not actually_live else "APPLIED (handle unchanged)",
         )
+
+        if cfg.get("option_renames"):
+            opt_result = api.rename_product_options(
+                product_id,
+                cfg["option_renames"],
+                dry_run=not actually_live,
+            )
+            api.dump_json(out_dir / "option-renames-result.json", opt_result)
+            print(
+                "Option renames:",
+                "DRY-RUN" if not actually_live else f"updates={opt_result.get('count')}",
+            )
 
         if cfg.get("metafields"):
             mf_result = api.set_product_metafields(
@@ -425,6 +440,45 @@ def main() -> int:
                 "Metafields:",
                 "DRY-RUN" if not actually_live else ("OK" if not errs else f"errors={errs}"),
             )
+
+        for coll_handle in cfg.get("collections") or []:
+            # Ensure collection exists (empty create); then add this product
+            ens = api.ensure_collection(
+                title=coll_handle.replace("-", " ").title(),
+                handle=coll_handle,
+                dry_run=not actually_live,
+            )
+            api.dump_json(out_dir / f"collection-{coll_handle}-ensure.json", ens)
+            coll_id = None
+            if not actually_live:
+                print(f"Collection {coll_handle}: DRY-RUN ensure")
+                continue
+            coll_id = (
+                ((ens.get("data") or {}).get("collectionCreate") or {}).get("collection")
+                or {}
+            ).get("id") or (
+                ((ens.get("data") or {}).get("collectionUpdate") or {}).get("collection")
+                or {}
+            ).get("id")
+            if not coll_id:
+                # re-fetch
+                found = api.graphql(
+                    """query($q:String!){ collections(first:1, query:$q){ nodes{ id } } }""",
+                    {"q": f"handle:{coll_handle}"},
+                )
+                coll_id = (
+                    (((found.get("data") or {}).get("collections") or {}).get("nodes") or [{}])[
+                        0
+                    ].get("id")
+                )
+            if coll_id:
+                add = api.collection_add_products(
+                    coll_id, [product_id], dry_run=False
+                )
+                api.dump_json(out_dir / f"collection-{coll_handle}-add.json", add)
+                print(f"Collection {coll_handle}: product added")
+            else:
+                print(f"Collection {coll_handle}: WARN could not resolve id")
 
     if args.apply_draft or dry_run:
         actually_apply = bool(args.apply_draft) and not dry_run
@@ -469,6 +523,10 @@ def main() -> int:
         "mode": "dry-run" if dry_run else ("apply-draft" if args.apply_draft else "apply-live"),
         "images": cfg.get("images", "reuse_existing_gallery"),
         "template_suffix": cfg.get("template_suffix"),
+        "product_type": cfg.get("product_type"),
+        "tags_count": len(cfg.get("tags") or []),
+        "collections": cfg.get("collections") or [],
+        "option_renames": bool(cfg.get("option_renames")),
         "metafield_keys": list((cfg.get("metafields") or {}).keys()),
         "never_set_live_product_status_to_draft": True,
         "draft_media_strategy": "fileUpdate.referencesToAdd",

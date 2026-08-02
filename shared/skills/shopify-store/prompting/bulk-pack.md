@@ -64,7 +64,7 @@ Or in Admin: product → Theme template → **product.bulk-pack**.
   "colour_css": {
     "Black": "#1c1c1c",
     "White": "#f2f0ea",
-    "Green": "#2f6b4f",
+    "Green": "#7d8d53",
     "Yellow": "#d9b84a"
   }
 }

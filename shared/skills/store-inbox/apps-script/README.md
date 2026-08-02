@@ -39,7 +39,7 @@ Canonical edit path:
 1. Edit [`templates/deal-followup.html`](templates/deal-followup.html) + [`templates/deal-followup.txt`](templates/deal-followup.txt).
 2. `python3 shared/skills/store-inbox/scripts/build-inbox-deal-page.py`
 3. Upsert `templates/page.inbox-deal.liquid` to the MAIN theme (`shopify-store` skill / Admin API).
-4. Live URL: **https://ourtechaccessories.com/pages/inbox-deal**
+4. Live URL: **https://ourtechaccessories.com/pages/inbox-deal** — JSON includes `base_price` from the live GaN product (`__GAN_BASE_PRICE__` in templates).
 5. In Apps Script run `refreshDealBodiesCache` (or wait ≤10 minutes for ScriptCache TTL).
 
 Full docs: [`../prompting/deal-followup.md`](../prompting/deal-followup.md).

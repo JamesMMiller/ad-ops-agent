@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Our Tech — Profit Admin</title>
-    <link rel="stylesheet" href="/static/styles.css?v=2" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/static/favicon.png" />
+    <link rel="stylesheet" href="/static/styles.css?v=17" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   </head>
   <body>
@@ -14,120 +17,764 @@
           <h1>Profit Admin</h1>
           <p class="muted" id="subtitle">Our Tech Accessories · local ops desk</p>
         </div>
-        <div class="header-actions">
+        <div class="header-actions header-actions-wrap">
+          <label class="view-picker field">
+            View
+            <select id="view-select">
+              <option value="">— Untitled —</option>
+            </select>
+          </label>
+          <button type="button" id="btn-view-save" class="btn" title="Overwrite the selected view">
+            Save
+          </button>
+          <button type="button" id="btn-view-save-as" class="btn">Save as…</button>
+          <button type="button" id="btn-view-delete" class="btn" disabled>Delete</button>
+          <button type="button" id="btn-view-reload" class="btn" title="Re-Apply saved filters (no source pull)">
+            Reload view
+          </button>
           <span class="muted" id="last-refreshed">Not refreshed yet</span>
-          <button type="button" id="btn-refresh" class="btn primary">Refresh</button>
+          <button type="button" id="btn-refresh" class="btn primary" title="Pull Shopify / Meta / KIE into a new snapshot">
+            Refresh data
+          </button>
         </div>
       </header>
 
       <div id="warnings" class="warnings" hidden></div>
 
-      <section class="stats" id="stats">
-        <div class="stat"><div class="stat-value" id="stat-rev">—</div><div class="stat-label">Revenue</div></div>
-        <div class="stat"><div class="stat-value" id="stat-ads">—</div><div class="stat-label">Meta spend</div></div>
-        <div class="stat"><div class="stat-value" id="stat-mer">—</div><div class="stat-label">Trailing 3-day MER</div></div>
-        <div class="stat"><div class="stat-value" id="stat-pnl">—</div><div class="stat-label">Cumulative P&amp;L</div></div>
-      </section>
-
-      <section class="toolbar">
-        <label>
-          Chart
-          <select id="chart-view">
-            <option value="cumPnl">Cumulative P&amp;L</option>
-            <option value="cumRevCost">Revenue vs costs</option>
-            <option value="dailyStack">Daily cost stack</option>
-            <option value="mer">3-day MER</option>
-          </select>
-        </label>
-      </section>
-
-      <section class="card">
-        <h2 id="chart-title">Cumulative estimated P&amp;L</h2>
-        <canvas id="main-chart" height="110"></canvas>
-        <p class="muted footnote" id="chart-note"></p>
-      </section>
-
-      <section class="card">
-        <h2>Daily breakdown</h2>
-        <div class="table-wrap">
-          <table id="daily-table">
-            <thead>
-              <tr>
-                <th>Day</th>
-                <th>Revenue</th>
-                <th>Ads</th>
-                <th>COGS</th>
-                <th>KIE</th>
-                <th>Day P&amp;L</th>
-                <th>Cum P&amp;L</th>
-                <th>3d MER</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2 id="product-pnl-heading">Product profitability</h2>
-        <p class="muted footnote" id="product-pnl-note">
-          Sold units only. Contribution = line revenue − landed COGS − checkout fees
-          allocated by line share. Meta ads and KIE are not attributed per product.
-          Click a row for variants and orders.
+      <!-- ── Shared scope ─────────────────────────────────────── -->
+      <section class="card scope-card" id="scope-card">
+        <h2>Scope</h2>
+        <p class="muted footnote">
+          Shared date range, Meta objects, and SKUs. Desk P&amp;L uses the latest Refresh snapshot
+          window; Ads / subset / warehouse past use this scope. Leaf-prefer: if a parent and child
+          are both ticked, only the child counts.
         </p>
-        <div class="table-wrap">
-          <table id="product-table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Orders</th>
-                <th>Units</th>
-                <th>Revenue</th>
-                <th>COGS</th>
-                <th>Fees</th>
-                <th>Contrib</th>
-                <th>Margin</th>
-                <th>Avg £</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="product-layout">
-          <div class="product-main">
-            <canvas id="product-chart" height="90"></canvas>
+
+        <div class="ads-grid">
+          <div class="ads-form">
+            <div class="toolbar-row ads-date-row">
+              <label>
+                Date range
+                <select id="ads-preset">
+                  <option value="last_7d">Last 7 days</option>
+                  <option value="last_30d" selected>Last 30 days</option>
+                  <option value="last_90d">Last 90 days</option>
+                  <option value="maximum">Maximum</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label id="ads-custom-since-wrap" hidden>
+                From
+                <input id="ads-since" type="date" />
+              </label>
+              <label id="ads-custom-until-wrap" hidden>
+                To
+                <input id="ads-until" type="date" />
+              </label>
+            </div>
+
+            <div class="ads-search-block">
+              <label class="field" for="ads-search">
+                Quick search
+                <span class="muted footnote" style="display:block;font-weight:400;text-transform:none;letter-spacing:0">
+                  Jump to anything · ↑↓ Enter to select · or use the columns below
+                </span>
+              </label>
+              <div class="ads-combobox" id="ads-combobox">
+                <input
+                  id="ads-search"
+                  type="search"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  aria-controls="ads-suggest"
+                  aria-haspopup="listbox"
+                  placeholder="e.g. GaN, Creative test, Vacuum…"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <div id="ads-suggest" class="ads-suggest" role="listbox" hidden></div>
+              </div>
+              <div class="ads-chips" id="ads-chips" hidden></div>
+              <div class="ads-search-actions">
+                <button type="button" class="btn btn-tiny" id="btn-ads-clear-all">Clear selection</button>
+                <p class="muted footnote" id="ads-selection-note">No objects selected.</p>
+              </div>
+            </div>
+
+            <div class="ads-tree" id="ads-tree">
+              <div class="ads-tree-toolbar">
+                <label class="field checkbox ads-active-toggle">
+                  <input id="ads-active-only" type="checkbox" checked />
+                  Active only
+                </label>
+                <button type="button" class="btn btn-tiny" id="btn-ads-focus-clear">Show all</button>
+                <p class="muted footnote" id="ads-focus-note">
+                  Select ad sets/ads across any campaigns. Optional: click a row to browse-filter.
+                </p>
+              </div>
+              <div class="ads-pickers">
+                <div class="ads-col" data-level="campaign">
+                  <div class="ads-picker-head">
+                    <h4 class="subhead">1. Campaigns <span class="ads-col-count" id="ads-count-camps"></span></h4>
+                    <div class="ads-picker-actions">
+                      <button type="button" class="btn btn-tiny" id="btn-ads-camps-all">All</button>
+                      <button type="button" class="btn btn-tiny" id="btn-ads-camps-none">Clear</button>
+                    </div>
+                  </div>
+                  <div class="wh-check-list ads-tree-list" id="ads-campaigns">
+                    <p class="muted footnote">Loading…</p>
+                  </div>
+                </div>
+                <div class="ads-col" data-level="adset">
+                  <div class="ads-picker-head">
+                    <h4 class="subhead">2. Ad sets <span class="ads-col-count" id="ads-count-adsets"></span></h4>
+                    <div class="ads-picker-actions">
+                      <button type="button" class="btn btn-tiny" id="btn-ads-adsets-all">All</button>
+                      <button type="button" class="btn btn-tiny" id="btn-ads-adsets-none">Clear</button>
+                    </div>
+                  </div>
+                  <div class="wh-check-list ads-tree-list" id="ads-adsets">
+                    <p class="muted footnote">Loading…</p>
+                  </div>
+                </div>
+                <div class="ads-col" data-level="ad">
+                  <div class="ads-picker-head">
+                    <h4 class="subhead">3. Ads <span class="ads-col-count" id="ads-count-ads"></span></h4>
+                    <div class="ads-picker-actions">
+                      <button type="button" class="btn btn-tiny" id="btn-ads-ads-all">All</button>
+                      <button type="button" class="btn btn-tiny" id="btn-ads-ads-none">Clear</button>
+                    </div>
+                  </div>
+                  <div class="wh-check-list ads-tree-list" id="ads-ads">
+                    <p class="muted footnote">Loading…</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ads-sku-block">
+              <label class="field">
+                Products / SKUs (optional)
+                <span class="muted footnote" style="display:block;font-weight:400;text-transform:none;letter-spacing:0">
+                  Empty = whole-store Ads P&amp;L. Selected = SKU mode for Ads / subset / warehouse.
+                </span>
+                <select id="ads-sku" multiple size="6"></select>
+              </label>
+              <div class="wh-sku-actions">
+                <button type="button" class="btn btn-tiny" id="btn-ads-sku-clear">Clear SKUs</button>
+                <button type="button" class="btn btn-tiny" id="btn-ads-sku-product">
+                  Select all variants of first
+                </button>
+              </div>
+              <p class="muted footnote" id="ads-sku-count">No SKUs — store P&amp;L mode.</p>
+            </div>
           </div>
-          <aside class="product-detail" id="product-detail">
-            <p class="muted">Select a product row to dig into variants and orders.</p>
-          </aside>
         </div>
       </section>
 
-      <section class="card">
-        <h2>Unit economics (ACTIVE SKUs)</h2>
-        <div class="table-wrap">
-          <table id="unit-table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Sell</th>
-                <th>Landed</th>
-                <th>Contrib</th>
-                <th>Margin</th>
-                <th>Min ROAS</th>
-                <th>Max CPA</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+      <!-- ── Section toggles + Apply ──────────────────────────── -->
+      <section class="card sections-card" id="sections-card">
+        <h2>Sections</h2>
+        <p class="muted footnote">
+          Toggle what appears below. Apply / Reload only runs compute for enabled sections.
+        </p>
+        <div class="section-toggles" id="section-toggles">
+          <label class="check"><input type="checkbox" data-section="desk_kpis" checked /> Desk KPIs + chart</label>
+          <label class="check"><input type="checkbox" data-section="daily" checked /> Daily breakdown</label>
+          <label class="check"><input type="checkbox" data-section="product_pnl" checked /> Product profitability</label>
+          <label class="check"><input type="checkbox" data-section="unit_economics" /> Unit economics</label>
+          <label class="check"><input type="checkbox" data-section="subset" /> Subset P&amp;L</label>
+          <label class="check"><input type="checkbox" data-section="ads" /> Ads performance</label>
+          <label class="check"><input type="checkbox" data-section="ads_pnl" /> Ads profitability</label>
+          <label class="check"><input type="checkbox" data-section="warehouse" /> Warehouse planner</label>
+        </div>
+        <div class="wh-actions" style="margin-top: 14px">
+          <button type="button" class="btn primary" id="btn-desk-apply">Apply</button>
+          <button type="button" class="btn" id="btn-pnl-export" disabled>Export P&amp;L PDF</button>
+          <button type="button" class="btn" id="btn-ads-export" disabled>Export Ads PDF</button>
+          <button type="button" class="btn" id="btn-wh-export" disabled>Export Warehouse Excel</button>
         </div>
       </section>
+
+      <!-- ── Desk KPIs + chart ────────────────────────────────── -->
+      <div id="sec-desk_kpis" class="desk-section">
+        <p class="muted footnote" id="pnl-intro">
+          Whole-store desk: Shopify revenue and landed costs vs Meta spend, KIE credits, and
+          amortised Shopify Basic. Figures are estimates — confirm in each platform.
+        </p>
+        <section class="stats" id="stats">
+          <div class="stat"><div class="stat-value" id="stat-rev">—</div><div class="stat-label" title="Paid Shopify sales in the snapshot window">Revenue</div></div>
+          <div class="stat"><div class="stat-value" id="stat-ads">—</div><div class="stat-label" title="Meta Insights account spend">Meta spend</div></div>
+          <div class="stat"><div class="stat-value" id="stat-mer">—</div><div class="stat-label" title="Store revenue ÷ Meta spend over the last 3 days. ~2.0× healthy after COGS.">Trailing 3-day MER</div></div>
+          <div class="stat"><div class="stat-value" id="stat-pnl">—</div><div class="stat-label" title="Running total of day P&amp;L from the snapshot start">Cumulative P&amp;L</div></div>
+        </section>
+        <p class="muted footnote" id="pnl-kpi-note">
+          MER (marketing efficiency ratio) uses store revenue ÷ ads — not Meta’s attributed ROAS.
+          ~2.0× is a healthy post-COGS target; ≥1.5× is watch.
+        </p>
+
+        <section class="toolbar toolbar-row">
+          <label>
+            Chart
+            <select id="chart-view">
+              <option value="cumPnl">Cumulative P&amp;L</option>
+              <option value="cumRevCost">Revenue vs costs</option>
+              <option value="dailyStack">Daily cost stack</option>
+              <option value="mer">3-day MER</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="card">
+          <h2 id="chart-title">Cumulative estimated P&amp;L</h2>
+          <canvas id="main-chart" height="110"></canvas>
+          <p class="muted footnote" id="chart-note"></p>
+        </section>
+      </div>
+
+      <!-- ── Subset P&L ───────────────────────────────────────── -->
+      <div id="sec-subset" class="desk-section" hidden>
+        <section class="card" id="subset-card">
+          <h2>Subset P&amp;L</h2>
+          <p class="muted footnote" id="subset-intro">
+            Scoped P&amp;L for Scope SKUs and Meta objects. Series starts on the earliest selected
+            ad set start date. Ads = selected Meta spend only; revenue/COGS = matching Shopify lines.
+            KIE and Shopify plan amortisation are omitted so the subset stays comparable.
+          </p>
+          <!-- kept for app.js compatibility; always on when section visible -->
+          <input id="subset-enabled" type="checkbox" checked hidden />
+          <div id="subset-results" hidden>
+            <div class="stats" id="subset-stats" style="margin-top: 16px"></div>
+            <p class="muted footnote" id="subset-note"></p>
+            <section class="toolbar toolbar-row">
+              <label>
+                Subset chart
+                <select id="subset-chart-view">
+                  <option value="cumPnl">Cumulative P&amp;L</option>
+                  <option value="cumRevCost">Revenue vs costs</option>
+                  <option value="dailyStack">Daily cost stack</option>
+                  <option value="mer">3-day MER</option>
+                </select>
+              </label>
+            </section>
+            <h3 class="subhead" id="subset-chart-title">Subset cumulative P&amp;L</h3>
+            <canvas id="subset-chart" height="110"></canvas>
+            <p class="muted footnote" id="subset-chart-note"></p>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── Daily breakdown ──────────────────────────────────── -->
+      <div id="sec-daily" class="desk-section">
+        <section class="card">
+          <h2>Daily breakdown</h2>
+          <p class="muted footnote">
+            One row per day. Day P&amp;L = revenue − COGS − fees − ads − KIE − Shopify slice.
+            Cum P&amp;L stacks those days. 3d MER = trailing 3-day store revenue ÷ Meta spend.
+          </p>
+          <div class="table-wrap">
+            <table id="daily-table">
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Revenue</th>
+                  <th>Ads</th>
+                  <th>COGS</th>
+                  <th>KIE</th>
+                  <th>Day P&amp;L</th>
+                  <th>Cum P&amp;L</th>
+                  <th>3d MER</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── Product profitability ────────────────────────────── -->
+      <div id="sec-product_pnl" class="desk-section">
+        <section class="card">
+          <h2 id="product-pnl-heading">Product profitability</h2>
+          <p class="muted footnote" id="product-pnl-note">
+            Sold units only. Contribution = line revenue − landed COGS (Shopify unitCost +
+            CJ postageAmount) − checkout fees allocated by line share (~1.5% + £0.25 per order,
+            split by revenue). Meta ads and KIE are not attributed per product — use Ads profitability
+            for that join. Click a row for variants and orders.
+          </p>
+          <div class="table-wrap">
+            <table id="product-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Orders</th>
+                  <th>Units</th>
+                  <th>Revenue</th>
+                  <th>COGS</th>
+                  <th>Fees</th>
+                  <th>Contrib</th>
+                  <th>Margin</th>
+                  <th>Avg £</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="product-layout">
+            <div class="product-main">
+              <canvas id="product-chart" height="90"></canvas>
+            </div>
+            <aside class="product-detail" id="product-detail">
+              <p class="muted">Select a product row to dig into variants and orders.</p>
+            </aside>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── Unit economics ───────────────────────────────────── -->
+      <div id="sec-unit_economics" class="desk-section" hidden>
+        <section class="card">
+          <h2>Unit economics (ACTIVE SKUs)</h2>
+          <p class="muted footnote">
+            ACTIVE catalog SKUs (not only what sold). Landed = unitCost + postage.
+            Contrib = sell − landed − fee estimate. Margin = contrib ÷ sell.
+            Min ROAS = sell ÷ contrib (ads must return at least this multiple of spend to cover the unit).
+            Max CPA = contrib (highest cost-per-purchase that still leaves £0 unit contribution).
+          </p>
+          <div class="table-wrap">
+            <table id="unit-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th title="Current sell price">Sell</th>
+                  <th title="unitCost + postage">Landed</th>
+                  <th title="Sell − landed − fee estimate">Contrib</th>
+                  <th title="Contrib ÷ sell">Margin</th>
+                  <th title="Sell ÷ contrib — minimum ROAS to cover the unit">Min ROAS</th>
+                  <th title="Equal to contrib — max CPA that leaves £0 contribution">Max CPA</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── Ads performance results ──────────────────────────── -->
+      <div id="sec-ads" class="desk-section" hidden>
+        <section class="card" id="ads-results" hidden>
+          <div class="ads-results-head">
+            <div>
+              <h2>Ads performance</h2>
+              <p class="muted footnote" id="ads-range-note"></p>
+            </div>
+            <label class="field checkbox ads-overlay-toggle" title="Plot each selected object as its own series (top 12 by spend). Off = combined.">
+              <input id="ads-overlay" type="checkbox" />
+              Overlay objects on charts
+            </label>
+          </div>
+          <p class="muted footnote" id="ads-intro">
+            Meta KPIs use Insights attribution. ROAS = attr. revenue ÷ spend · CPA = spend ÷ purchases ·
+            CTR = clicks ÷ impressions · CPC = spend ÷ clicks · CPM = spend per 1,000 impressions.
+            Attr. revenue is Meta’s view — Store MER below uses Shopify revenue instead.
+          </p>
+
+          <section class="stats ads-stats" id="ads-stats">
+            <div class="stat"><div class="stat-value" id="ads-stat-spend">—</div><div class="stat-label" title="Meta Insights spend for the selection">Spend</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-purch">—</div><div class="stat-label" title="Attributed purchases (Meta)">Purchases</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-rev">—</div><div class="stat-label" title="Attributed purchase value (Meta)">Attr. revenue</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-roas">—</div><div class="stat-label" title="Attr. revenue ÷ spend">ROAS</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-cpa">—</div><div class="stat-label" title="Spend ÷ purchases">CPA</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-impr">—</div><div class="stat-label">Impressions</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-clicks">—</div><div class="stat-label">Clicks</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-ctr">—</div><div class="stat-label" title="Clicks ÷ impressions">CTR</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-cpc">—</div><div class="stat-label" title="Spend ÷ clicks">CPC</div></div>
+            <div class="stat"><div class="stat-value" id="ads-stat-cpm">—</div><div class="stat-label" title="Spend per 1,000 impressions">CPM</div></div>
+          </section>
+
+          <div class="toolbar toolbar-row">
+            <label>
+              Chart
+              <select id="ads-chart-view">
+                <option value="spend">Spend over time</option>
+                <option value="purchRev">Purchases &amp; attr. revenue</option>
+                <option value="roas">ROAS over time</option>
+                <option value="ctr">CTR over time</option>
+              </select>
+            </label>
+            <p class="muted footnote" id="ads-chart-note"></p>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="ads-chart" height="120"></canvas>
+          </div>
+
+          <h3 class="subhead">Breakdown by object</h3>
+          <p class="muted footnote">
+            One row per selected leaf object after leaf-prefer. Parent shows campaign / ad set.
+            Sort by spend or ROAS to find winners and losers.
+          </p>
+          <div class="table-wrap">
+            <table id="ads-table">
+              <thead>
+                <tr>
+                  <th data-sort="level">Level</th>
+                  <th data-sort="name">Name</th>
+                  <th data-sort="parent">Parent</th>
+                  <th data-sort="spend" class="num">Spend</th>
+                  <th data-sort="purchases" class="num">Purch</th>
+                  <th data-sort="attr_rev" class="num">Attr rev</th>
+                  <th data-sort="roas" class="num">ROAS</th>
+                  <th data-sort="cpa" class="num">CPA</th>
+                  <th data-sort="impressions" class="num">Impr</th>
+                  <th data-sort="clicks" class="num">Clicks</th>
+                  <th data-sort="ctr" class="num">CTR</th>
+                  <th data-sort="cpc" class="num">CPC</th>
+                  <th data-sort="cpm" class="num">CPM</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── Ads profitability ────────────────────────────────── -->
+      <div id="sec-ads_pnl" class="desk-section" hidden>
+        <section class="card" id="ads-pnl-section" hidden>
+          <div class="ads-results-head">
+            <div>
+              <h2>Ads profitability <span class="ads-mode-badge" id="ads-pnl-mode"></span></h2>
+              <p class="muted footnote" id="ads-pnl-note"></p>
+              <p class="muted footnote">
+                STORE = whole-store Shopify P&amp;L; ads = selected Meta only.
+                SKU = selected products vs those ads (KIE/Shopify amort omitted).
+                Store MER = Shopify revenue ÷ selected ads · Meta ROAS = attr. revenue ÷ spend.
+              </p>
+            </div>
+          </div>
+          <section class="stats ads-stats" id="ads-pnl-stats">
+            <div class="stat"><div class="stat-value" id="ads-pnl-rev">—</div><div class="stat-label" title="Shopify revenue in scope">Revenue</div></div>
+            <div class="stat"><div class="stat-value" id="ads-pnl-cogs">—</div><div class="stat-label" title="unitCost + postage">Landed COGS</div></div>
+            <div class="stat"><div class="stat-value" id="ads-pnl-fees">—</div><div class="stat-label" title="Checkout fees allocated in scope">Fees</div></div>
+            <div class="stat"><div class="stat-value" id="ads-pnl-ads">—</div><div class="stat-label" title="Selected Meta object spend">Meta spend</div></div>
+            <div class="stat"><div class="stat-value" id="ads-pnl-cum">—</div><div class="stat-label" title="Running P&amp;L for this scope">Cum. P&amp;L</div></div>
+            <div class="stat"><div class="stat-value" id="ads-pnl-mer">—</div><div class="stat-label" title="Shopify revenue ÷ selected Meta spend">Store MER</div></div>
+            <div class="stat"><div class="stat-value" id="ads-pnl-roas">—</div><div class="stat-label" title="Meta attr. revenue ÷ spend">Meta ROAS</div></div>
+            <div class="stat"><div class="stat-value" id="ads-pnl-orders">—</div><div class="stat-label">Orders</div></div>
+          </section>
+          <div class="toolbar toolbar-row">
+            <label>
+              P&amp;L chart
+              <select id="ads-pnl-chart-view">
+                <option value="cumPnl">Cumulative P&amp;L</option>
+                <option value="cumRevCost">Revenue vs costs</option>
+                <option value="dailyStack">Daily cost stack</option>
+                <option value="mer">3-day MER</option>
+              </select>
+            </label>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="ads-pnl-chart" height="120"></canvas>
+          </div>
+          <p class="muted footnote" id="ads-pnl-chart-note"></p>
+        </section>
+      </div>
+
+      <!-- ── Warehouse planner ────────────────────────────────── -->
+      <div id="sec-warehouse" class="desk-section" hidden>
+        <section class="card">
+          <h2>CJ 3PL warehouse planner</h2>
+          <p class="muted footnote">
+            Forward estimate of CJ 3PL stocking: inbound, storage (FIFO), outbound, postage, and
+            optional ads. Uses Scope SKUs when selected. Fee bands from
+            <a href="https://cjdropshipping.com/service-fee" target="_blank" rel="noopener"
+              >cjdropshipping.com/service-fee</a
+            >
+            (USD → GBP estimates). Confirm last-mile postage on CJ Shipping Calculation.
+          </p>
+          <p class="muted footnote">
+            ROAS = revenue ÷ ads · ROAS (after COGS) = (revenue − landed COGS) ÷ ads ·
+            POAS = profit ÷ ads · Margin (inc ads) = profit ÷ revenue.
+          </p>
+
+          <div class="wh-grid">
+            <div class="wh-form">
+              <p class="muted footnote" id="wh-sku-count">No SKUs in Scope — enter costs manually.</p>
+              <label class="field">
+                Custom label
+                <input id="wh-label" type="text" placeholder="e.g. GaN Charger (all colours)" />
+              </label>
+
+              <fieldset class="fieldset" id="wh-past-fieldset">
+                <legend>
+                  <label class="legend-check">
+                    <input id="wh-past" type="checkbox" />
+                    Show past performance
+                  </label>
+                </legend>
+                <div id="wh-past-fields" hidden>
+                  <p class="muted footnote">
+                    Uses Scope date range, SKUs, and Meta selection for Shopify sales + Meta spend.
+                    (Warehouse past ignores custom From/To — uses the date preset.)
+                  </p>
+                  <!-- Hidden preset kept for collectState; synced from ads-preset -->
+                  <select id="wh-past-preset" hidden>
+                    <option value="maximum">Maximum</option>
+                    <option value="last_7d">Last 7 days</option>
+                    <option value="last_14d">Last 14 days</option>
+                    <option value="last_30d" selected>Last 30 days</option>
+                    <option value="last_90d">Last 90 days</option>
+                  </select>
+                </div>
+              </fieldset>
+
+              <fieldset class="fieldset" id="wh-mode-fieldset">
+                <legend>
+                  <label class="legend-check">
+                    <input id="wh-track-stock" type="checkbox" checked />
+                    Wholesale / dropship
+                  </label>
+                </legend>
+                <p class="muted footnote" id="wh-mode-hint">
+                  On: track how much stock you hold (inbound, storage, restock, stockouts). Off: stock doesn’t matter — open demand at your sell rate.
+                </p>
+              </fieldset>
+
+              <div class="field-row" id="wh-row-warehouse">
+                <label class="field">
+                  Warehouse
+                  <select id="wh-warehouse"></select>
+                </label>
+                <label class="field wh-stock-only">
+                  Stock lane (CN → WH)
+                  <select id="wh-lane"></select>
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field wh-stock-only">
+                  Units to stock
+                  <input id="wh-qty" type="number" min="1" step="1" value="100" />
+                </label>
+                <label class="field">
+                  Sell rate (units / day)
+                  <input id="wh-rate" type="number" min="0" step="0.1" value="1" />
+                </label>
+                <label class="field">
+                  Horizon (days)
+                  <input id="wh-horizon" type="number" min="1" max="730" step="1" value="180" />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  Sell price (£)
+                  <input id="wh-sell" type="number" min="0" step="0.01" value="18.99" />
+                </label>
+                <label class="field">
+                  Product cost (£)
+                  <input id="wh-cost" type="number" min="0" step="0.01" value="3.00" />
+                </label>
+                <label class="field">
+                  Unit weight (kg)
+                  <input id="wh-weight" type="number" min="0.001" step="0.01" value="0.15" />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field wh-stock-only">
+                  Unit volume (CBM)
+                  <input id="wh-cbm" type="number" min="0.000001" step="0.0001" value="0.001" />
+                </label>
+                <label class="field wh-stock-only">
+                  Cartons (inbound unload)
+                  <input id="wh-cartons" type="number" min="1" step="1" value="1" />
+                </label>
+                <label class="field">
+                  Daily ad spend (£)
+                  <input id="wh-ads" type="number" min="0" step="1" value="0" />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field">
+                  Ad cost / purchase (£)
+                  <input
+                    id="wh-cpa"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value=""
+                    placeholder="Optional — e.g. 7.30"
+                  />
+                </label>
+                <label class="field">
+                  Postage in COGS / P&amp;L
+                  <select id="wh-postage">
+                    <option value="included" selected>Included (free shipping / you pay)</option>
+                    <option value="excluded">Excluded (customer pays)</option>
+                  </select>
+                </label>
+                <label class="field checkbox wh-stock-only">
+                  <input id="wh-peak" type="checkbox" />
+                  Peak season storage (Oct–Dec)
+                </label>
+              </div>
+              <div class="field-row wh-stock-only">
+                <label class="field checkbox">
+                  <input id="wh-stop-ads" type="checkbox" checked />
+                  Stop daily ads when stock is 0
+                </label>
+              </div>
+              <p class="muted footnote" id="wh-ads-hint">
+                Ads: daily spend applies on days with stock (unless you uncheck stop); cost/purchase is per unit sold.
+              </p>
+
+              <fieldset class="fieldset wh-stock-only" id="wh-restock-fieldset">
+                <legend>
+                  <label class="legend-check">
+                    <input id="wh-restock" type="checkbox" />
+                    Repeat restock
+                  </label>
+                </legend>
+                <div class="field-row" id="wh-restock-fields" hidden>
+                  <label class="field">
+                    Restock amount (units)
+                    <input id="wh-restock-qty" type="number" min="1" step="1" value="100" />
+                  </label>
+                  <label class="field">
+                    Every (days)
+                    <input id="wh-restock-every" type="number" min="1" max="365" step="1" value="30" />
+                  </label>
+                </div>
+                <p class="muted footnote">
+                  Optional. Adds inventory on day 30, 60, … (and charges inbound fees each time; inspection only on first stock-in). Storage ages each batch separately (FIFO).
+                </p>
+              </fieldset>
+
+              <fieldset class="fieldset">
+                <legend>Destination mix (last-mile)</legend>
+                <div class="field-row dest-row">
+                  <label class="field">UK % <input id="mix-uk" type="number" min="0" max="100" step="1" value="70" /></label>
+                  <label class="field">EU % <input id="mix-eu" type="number" min="0" max="100" step="1" value="20" /></label>
+                  <label class="field">US % <input id="mix-us" type="number" min="0" max="100" step="1" value="5" /></label>
+                  <label class="field">CAN % <input id="mix-can" type="number" min="0" max="100" step="1" value="5" /></label>
+                </div>
+                <div class="field-row dest-row" id="wh-lm-row">
+                  <label class="field">UK ship $ <input id="lm-uk" type="number" min="0" step="0.1" /></label>
+                  <label class="field">EU ship $ <input id="lm-eu" type="number" min="0" step="0.1" /></label>
+                  <label class="field">US ship $ <input id="lm-us" type="number" min="0" step="0.1" /></label>
+                  <label class="field">CAN ship $ <input id="lm-can" type="number" min="0" step="0.1" /></label>
+                </div>
+                <p class="muted footnote" id="wh-postage-hint">
+                  Rates still used for transit estimates; only “Included” puts them in margin and P&amp;L.
+                </p>
+              </fieldset>
+
+              <div class="wh-actions">
+                <span class="muted" id="wh-fx"></span>
+              </div>
+            </div>
+
+            <aside class="wh-summary" id="wh-summary">
+              <p class="muted">Run Apply with Warehouse enabled to see landed COGS, storage over time, and transit estimates.</p>
+            </aside>
+          </div>
+        </section>
+
+        <section class="card" id="wh-results" hidden>
+          <div id="wh-past-results" hidden></div>
+
+          <h2>Costs over time</h2>
+          <p class="muted footnote">
+            Costs and contribution over the sell horizon. Sawtooth jumps = restock events.
+            Compare cumulative P&amp;L to remaining inventory when stock is modelled.
+          </p>
+          <canvas id="wh-chart" height="110"></canvas>
+          <p class="muted footnote" id="wh-chart-note"></p>
+
+          <div class="stats wh-stats" id="wh-stats"></div>
+
+          <div class="wh-two-col">
+            <div>
+              <h3 class="subhead">Unit economics (avg sold unit)</h3>
+              <p class="muted footnote">
+                Average economics per unit sold in the simulation (sell, landed, contribution, margins, ROAS/POAS).
+              </p>
+              <div class="table-wrap">
+                <table id="wh-unit-table">
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <h3 class="subhead">Transit estimates</h3>
+              <p class="muted footnote">Estimated inbound / stock-lane timing from CJ (not a shipping quote).</p>
+              <div class="table-wrap">
+                <table id="wh-transit-table">
+                  <thead>
+                    <tr>
+                      <th>Lane</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <h3 class="subhead">Milestones</h3>
+              <p class="muted footnote">Snapshots along the horizon (units sold/left, storage, contribution).</p>
+              <div class="table-wrap">
+                <table id="wh-mile-table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Sold</th>
+                      <th>Left</th>
+                      <th>Storage</th>
+                      <th>Contrib</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="subhead">One-time inbound (USD)</h3>
+          <p class="muted footnote">
+            CJ stock-in fees for this shipment (inspection, unload, labels, stock shipping, etc.) —
+            estimated from the service-fee page, not an invoice.
+          </p>
+          <div class="table-wrap">
+            <table id="wh-inbound-table">
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="wh-pnl-card" id="wh-pnl">
+            <h3 class="subhead">Overall profit / loss</h3>
+            <p class="muted footnote" id="wh-pnl-note"></p>
+            <div class="table-wrap">
+              <table id="wh-pnl-table">
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="wh-pnl-verdict" id="wh-pnl-verdict"></div>
+          </div>
+        </section>
+      </div>
 
       <footer class="footer muted">
         Costs: Shopify unitCost · Meta Insights · KIE log credits × KIE_USD_PER_CREDIT × USDGBP ·
-        Shopify Basic amortised. Secrets stay on the server. Phase 2: embed in Shopify Admin via App Bridge.
+        Shopify Basic amortised · CJ 3PL fees from service-fee page (estimates). Secrets stay on the
+        server. Phase 2: embed in Shopify Admin via App Bridge.
       </footer>
     </div>
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/concepts.js?v=1"></script>
+    <script src="/static/app.js?v=10"></script>
+    <script src="/static/warehouse.js?v=17"></script>
+    <script src="/static/ads.js?v=7"></script>
+    <script src="/static/views.js?v=1"></script>
   </body>
 </html>

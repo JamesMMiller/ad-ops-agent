@@ -26,6 +26,7 @@ Cursor discovers project skills under **`.cursor/skills/*/SKILL.md`** (populated
 6. Journey blog posts / Hashnode: **`.cursor/skills/blog-writing/SKILL.md`** — draft under `blog/posts/`; Hashnode draft before publish; `check-hashnode-env.sh`.
 7. Store inbox (`hello@` + triage bot): **`.cursor/skills/store-inbox/SKILL.md`** — ImprovMX/DNS, Gmail Send-as, Apps Script install; deal HTML from live `/pages/inbox-deal`.
 8. Generic Apps Script helpers: **`.cursor/skills/google-apps-script/SKILL.md`** — mailbox identity, Script Properties, triggers; not a substitute for `store-inbox`.
+9. Profit Admin advice: **`.cursor/skills/profit-ops/SKILL.md`** — snapshots under `outputs/profit-admin/`; saved views in `views/` (Reload ≠ Refresh); digest with `summarize_snapshot.py` before recommending next steps.
 
 Canonical sources to edit: `skills/` and `shared/skills/`. After editing, run `./scripts/sync-skill.sh` (or start a new agent session).
 

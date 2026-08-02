@@ -8,7 +8,7 @@ Hi{{NAME_SUFFIX}},
 - 3 chargers: 20% off
 - 4 or more: 25% off
 
-From £16.99 each before the volume discount. Mix colours in one order if you like.
+From £__GAN_BASE_PRICE__ each before the volume discount. Mix colours in one order if you like.
 
 Shop the deal:
 https://ourtechaccessories.com/products/120w-gan-fast-charger-with-a-built-in-retractable-cable
@@ -16,7 +16,7 @@ https://ourtechaccessories.com/products/120w-gan-fast-charger-with-a-built-in-re
 Also in the shop:
 - Magnetic vacuum phone mount: https://ourtechaccessories.com/products/foldable-magnetic-vacuum-car-phone-holder-foldable-suction-cup-with-suction-cup-hands-free-navigation-for-smart-phone
 - Folding neck fan: https://ourtechaccessories.com/products/folding-hanging-neck-electric-fan
-- Cordless car vacuum: https://ourtechaccessories.com/products/car-vacuum-cleaner
+- Qi2 folding charger: https://ourtechaccessories.com/products/multifunctional-qi2-wireless-charger-travel-business-trip-portable-folding-three-in-one
 
 If you still need help with an order or product, reply here with the details (and your order number if you have one).
 

@@ -7,9 +7,11 @@ description: >-
   existing ad set. Also pulls top-performing ads (ranked by ROAS) and competitor
   ads from the Ad Library to inform copy. Builds a local research browser +
   Cursor canvas so the user can browse competitor creatives and cite them in
-  chat. Use when the user asks to deploy / publish / launch a creative as a Meta
-  or Facebook ad, build a Meta ad, push a video or image into an ad set, pull
-  their top ads, research competitor ads, or browse Ad Library research.
+  chat. Runs a few-day creative-iteration cycle on one ad set (cut losers, cap
+  ACTIVE ads, spawn winner variations). Use when the user asks to deploy /
+  publish / launch a creative as a Meta or Facebook ad, build a Meta ad, push a
+  video or image into an ad set, pull their top ads, research competitor ads,
+  browse Ad Library research, iterate an ad set, cut losers, or spawn winners.
   Not for generating creative (use the image/video skills) and not for writing
   AdTable/Airtable rows (use adtable-light).
 ---
@@ -17,9 +19,10 @@ description: >-
 # Meta ad builder
 
 Turn a finished creative — typically the output of a generative-AI skill in this
-workspace — into a live Meta ad. The skill covers three phases: **research**
-(optional) → **copy** → **deploy**. It talks to the Meta Marketing API directly
-via ported, parameterized Python scripts.
+workspace — into a live Meta ad. The skill covers **research** (optional) →
+**copy** → **deploy**, plus an optional **iterate** cycle on creative-test ad
+sets. It talks to the Meta Marketing API directly via ported, parameterized
+Python scripts.
 
 ## When to use this skill
 
@@ -30,6 +33,7 @@ Trigger on phrases like:
 - "pull my top-performing ads" / "what are my best ads by ROAS"
 - "research competitor ads" / "pull <brand>'s ads from the Ad Library"
 - "browse Ad Library research" / "open the research UI"
+- "iterate this ad set" / "creative cycle" / "cut losers spawn winners"
 
 Do **not** use this skill to *generate* creative — that's `pixar-style-ad`,
 `claymation-ad`, `generate-youtube-thumbnail`, `uni1-image-ad`, etc. Do not use
@@ -43,11 +47,15 @@ it to write AdTable/Airtable rows — that's `adtable-light`. This skill is the
    3-description frameworks and the `--copy-file` JSON shape.
 3. **[reference/deploy-patterns.md](reference/deploy-patterns.md)** — creative
    spec mechanics, video polling, retry, failure modes.
-4. **[reference/ad-library-research.md](reference/ad-library-research.md)** —
+4. **[reference/creative-iteration.md](reference/creative-iteration.md)** — few-day
+   cut/keep/spawn cycle, ACTIVE cap, spawn briefs.
+5. **[reference/ad-library-research.md](reference/ad-library-research.md)** —
    keyword sweeps, `browser.html`, Cursor canvas from `canvas-data.json`.
-5. **[reference/meta-api-cheatsheet.md](reference/meta-api-cheatsheet.md)** — the
+6. **[reference/meta-api-cheatsheet.md](reference/meta-api-cheatsheet.md)** — the
    full Meta Marketing API reference (campaigns, ad sets, ads, enums, gotchas,
    Ad Library). Consult as needed; don't read end-to-end.
+7. **[reference/naming-convention.md](reference/naming-convention.md)** — searchable
+   `OTA | {sku} | …` names for campaigns, ad sets, and ads.
 
 ## Prerequisites
 
@@ -150,6 +158,25 @@ python scripts/deploy-ad.py \
   Ads Manager. The skill never launches a spending ad automatically.
 - Results (ad IDs) are written to `deployment_results.json` under `OUTPUT_BASE`.
 
+### Phase 4 — Iterate (creative-test ad sets)
+
+Every **3–4 days**, run the cut/keep/spawn cycle on one CT ad set. Read
+**[creative-iteration.md](reference/creative-iteration.md)** first.
+
+```bash
+# Dry-run — classify, write plan.json + summary.md (no Meta writes)
+python scripts/iterate-adset.py --adset-id <AD_SET_ID>
+
+# After user approves the pause list
+python scripts/iterate-adset.py --adset-id <AD_SET_ID> --apply
+```
+
+Defaults: `last_3d` window, **max 5 ACTIVE**, £8 min spend to judge, skip if
+&lt; £20 spend. `--apply` **pauses** losers / excess mids only — never deletes,
+never auto-activates. Spawn creatives still go through generate skills →
+Phase 2 (optional) → Phase 3 (`deploy-ad.py` PAUSED) → human unmute. Prefer at
+most **2** new ads unmuted per cycle.
+
 ## Decision tree
 
 | User intent | Phases |
@@ -159,18 +186,22 @@ python scripts/deploy-ad.py \
 | "Make ads modeled on my winners" | Phase 1 → 2 → 3 |
 | "What are my best ads / competitor research" | Phase 1 only (+ browser/canvas) |
 | "Browse / open Ad Library research UI" | Rebuild browser + canvas from run dir |
+| "Iterate this ad set" / "cut losers spawn winners" | Phase 4 → (spawn) generate → 2 → 3 |
 
 ## Safety rules
 
 - **Ads deploy PAUSED.** Never add an `--active` override or un-pause ads without
   an explicit user instruction. Confirm the user knows the ads are paused.
 - **Dry-run before every real deploy.** Show the payload; get a go-ahead.
+- **Iterate pauses need approval.** Dry-run `iterate-adset.py` first; only
+  `--apply` after the user confirms the pause list.
 - **Confirm the target ad set and destination URL** with the user before
   deploying — an ad in the wrong ad set spends against the wrong budget.
 - **Deploying ads is a shared-state, money-adjacent action.** Treat the live
-  `deploy-ad.py` run as something to confirm, not assume.
-- The skill creates ads only — it does **not** create or edit campaigns, ad sets,
-  budgets, or audiences. Those stay manual.
+  `deploy-ad.py` / `iterate-adset.py --apply` run as something to confirm, not
+  assume.
+- The skill creates ads and can pause ads in an iterate cycle — it does **not**
+  create or edit campaigns, ad sets, budgets, or audiences. Those stay manual.
 
 ## Quirks and pitfalls
 

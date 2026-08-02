@@ -35,7 +35,10 @@ def build_pnl(
     shopify: dict[str, Any] | None,
     meta: dict[str, Any] | None,
     kie: dict[str, Any] | None,
+    cj: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    from collectors.cj_collector import postage_gbp_for_order
+
     cost_by_sku: dict[str, float] = dict((shopify or {}).get("cost_by_sku") or {})
     orders = list((shopify or {}).get("orders") or [])
     meta_days = list((meta or {}).get("days") or [])
@@ -43,6 +46,7 @@ def build_pnl(
 
     rev_by: dict[str, float] = defaultdict(float)
     cogs_by: dict[str, float] = defaultdict(float)
+    postage_by: dict[str, float] = defaultdict(float)
     fees_by: dict[str, float] = defaultdict(float)
     orders_by: dict[str, int] = defaultdict(int)
 
@@ -57,6 +61,10 @@ def build_pnl(
             cogs_by[d] += _landed_for_sku(
                 it.get("sku") or "", int(it.get("qty") or 0), cost_by_sku
             )
+        postage = postage_gbp_for_order(cj, o.get("name"))
+        if postage:
+            postage_by[d] += postage
+            cogs_by[d] += postage
 
     spend_by = {r["date"]: float(r["spend"]) for r in meta_days}
     attr_by = {r["date"]: float(r["attr_rev"]) for r in meta_days}
@@ -112,6 +120,7 @@ def build_pnl(
                 "label": key[5:],  # MM-DD
                 "rev": round(rev, 2),
                 "cogs": round(cogs, 2),
+                "postage": round(postage_by.get(key, 0.0), 2),
                 "fees": round(fees, 2),
                 "ads": round(ads, 2),
                 "kie_gbp": round(kie_gbp, 2),
@@ -139,9 +148,11 @@ def build_pnl(
         row["mer3d"] = round(w_rev / w_ads, 2) if w_ads > 0 else 0.0
 
     latest = days[-1] if days else None
+    total_postage = sum(postage_by.values())
     totals = {
         "revenue": round(cum_rev, 2),
         "landed_cogs": round(cum_cogs, 2),
+        "postage": round(total_postage, 2),
         "fees": round(cum_fees, 2),
         "meta_spend": round(cum_ads, 2),
         "kie_gbp": round(cum_kie, 2),
@@ -165,7 +176,10 @@ def build_pnl(
             "fee_fixed_gbp": fee_f,
             "shopify_monthly_gbp": shopify_monthly_gbp(),
             "shopify_per_day_gbp": round(shop_day, 4),
-            "cogs_source": "Shopify unitCost preferred; CJ fallback prefixes; else £3/unit estimate",
+            "cogs_source": (
+                "Shopify unitCost (+ CJ fallback prefixes) + CJ postageAmount "
+                "(matched by Shopify order name)"
+            ),
         },
         "days": days,
         "totals": totals,
@@ -239,10 +253,15 @@ def _short_product_name(title: str, handle: str | None = None) -> str:
     return t if len(t) <= 42 else t[:39] + "…"
 
 
-def build_product_pnl(shopify: dict[str, Any] | None) -> list[dict[str, Any]]:
+def build_product_pnl(
+    shopify: dict[str, Any] | None,
+    cj: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """Actual sold-unit profitability by product (pre Meta / KIE attribution)."""
     if not shopify:
         return []
+
+    from collectors.cj_collector import postage_gbp_for_order
 
     fee_p = fee_pct()
     fee_f = fee_fixed_gbp()
@@ -271,6 +290,7 @@ def build_product_pnl(shopify: dict[str, Any] | None) -> list[dict[str, Any]]:
                 "order_names": set(),
                 "revenue": 0.0,
                 "cogs": 0.0,
+                "postage": 0.0,
                 "fees": 0.0,
                 "variants": {},  # sku → agg
                 "order_lines": [],  # dig-in rows
@@ -284,19 +304,24 @@ def build_product_pnl(shopify: dict[str, Any] | None) -> list[dict[str, Any]]:
         line_revs = [float(it.get("unit") or 0) * int(it.get("qty") or 0) for it in items]
         sub = sum(line_revs) or 1.0
         order_fee = float(o.get("total") or 0) * fee_p + fee_f
+        total_qty = sum(int(it.get("qty") or 0) for it in items) or 1
+        order_postage = postage_gbp_for_order(cj, o.get("name")) or 0.0
         for it, line_rev in zip(items, line_revs):
             sku = (it.get("sku") or "").strip()
             title = it.get("title") or "Unknown"
             qty = int(it.get("qty") or 0)
             if qty <= 0:
                 continue
-            cogs = _landed_for_sku(sku, qty, cost_by_sku)
+            product_cogs = _landed_for_sku(sku, qty, cost_by_sku)
+            postage_share = order_postage * (qty / total_qty)
+            cogs = product_cogs + postage_share
             fee_share = order_fee * (line_rev / sub)
             b = bucket_for(sku, title)
             b["units"] += qty
             b["order_names"].add(o.get("name") or o.get("date") or "")
             b["revenue"] += line_rev
             b["cogs"] += cogs
+            b["postage"] += postage_share
             b["fees"] += fee_share
 
             meta = sku_meta.get(sku) or {}
@@ -309,11 +334,13 @@ def build_product_pnl(shopify: dict[str, Any] | None) -> list[dict[str, Any]]:
                     "units": 0,
                     "revenue": 0.0,
                     "cogs": 0.0,
+                    "postage": 0.0,
                     "fees": 0.0,
                 }
             variants[vkey]["units"] += qty
             variants[vkey]["revenue"] += line_rev
             variants[vkey]["cogs"] += cogs
+            variants[vkey]["postage"] += postage_share
             variants[vkey]["fees"] += fee_share
 
             b["order_lines"].append(
@@ -325,6 +352,7 @@ def build_product_pnl(shopify: dict[str, Any] | None) -> list[dict[str, Any]]:
                     "qty": qty,
                     "unit": round(float(it.get("unit") or 0), 2),
                     "revenue": round(line_rev, 2),
+                    "postage": round(postage_share, 2),
                     "cogs": round(cogs, 2),
                     "fees": round(fee_share, 2),
                     "contrib": round(line_rev - cogs - fee_share, 2),
@@ -371,6 +399,7 @@ def build_product_pnl(shopify: dict[str, Any] | None) -> list[dict[str, Any]]:
                 "orders": len({n for n in b["order_names"] if n}),
                 "revenue": round(rev, 2),
                 "cogs": round(cogs, 2),
+                "postage": round(b.get("postage") or 0.0, 2),
                 "fees": round(fees, 2),
                 "contrib": round(contrib, 2),
                 "margin": round(margin, 3),

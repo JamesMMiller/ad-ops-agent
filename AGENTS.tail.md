@@ -15,8 +15,9 @@
   - `blog-writing` — journey blog posts (James Miller / Our Tech Accessories) + Hashnode GraphQL draft-first publish. Source: `blog/posts/`. Check: `bash shared/skills/blog-writing/scripts/check-hashnode-env.sh`.
   - `store-inbox` — `hello@ourtechaccessories.com` (ImprovMX → store Gmail) + LLM triage Apps Script (decline pitches, FAQ, discount→deal, escalate). Deal HTML from live **`/pages/inbox-deal`**. Guide: `shared/skills/store-inbox/SKILL.md`.
   - `google-apps-script` — generic Apps Script authoring (Gmail/Sheets, mailbox guard, Script Properties, triggers). Guide: `shared/skills/google-apps-script/SKILL.md`.
-  - `meta-ad-builder` — publish creatives as PAUSED Meta ads (optional); Ad Library research via `sweep-ad-library.py` builds `browser.html` + Cursor canvas for browsing/citing competitor ads.
-  - **Profit Admin** (`apps/profit-admin/`) — local P&L desk (Shopify + Meta + KIE log) with Refresh; embed-ready API for a later Shopify Admin app. Run: see `apps/profit-admin/README.md`.
+  - `meta-ad-builder` — publish creatives as PAUSED Meta ads (optional); Ad Library research via `sweep-ad-library.py` builds `browser.html` + Cursor canvas for browsing/citing competitor ads; creative-iteration cycle via `iterate-adset.py` (cut losers, ACTIVE cap, spawn winner variations).
+  - **Profit Admin** (`apps/profit-admin/`) — unified local desk (optional P&L / Ads / Warehouse sections), saved views under `outputs/profit-admin/views/`, **Refresh data** vs **Reload view**. Embed-ready API for a later Shopify Admin app. Run: see `apps/profit-admin/README.md`.
+  - `profit-ops` — analyse Profit Admin snapshots / Ads+P&L reports and recommend next ops steps (budget, creative, SKUs, COGS). Guide: `shared/skills/profit-ops/SKILL.md`. Digest: `python3 shared/skills/profit-ops/scripts/summarize_snapshot.py --snapshot outputs/profit-admin/snapshots/latest.json`.
 - **Reference images:** public URLs only for KIE — see *Image hosting* in `MASTER_CONTEXT.md`.
 - **Meta video default:** `aspect_ratio: "1:1"` for IG + Facebook feed dual-placement.
 - **Logging:** `logs/kie-api.jsonl`.
