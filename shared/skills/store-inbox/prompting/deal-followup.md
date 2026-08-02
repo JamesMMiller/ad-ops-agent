@@ -33,7 +33,8 @@ Canonical templates (edit these, then regenerate the Shopify page template):
 - [`../apps-script/templates/deal-followup.txt`](../apps-script/templates/deal-followup.txt)
 
 **Live endpoint (preferred for the bot):**  
-`https://ourtechaccessories.com/pages/inbox-deal` → JSON `{ "version", "html", "plain" }`  
+`https://ourtechaccessories.com/pages/inbox-deal` → JSON `{ "version", "base_price", "html", "plain" }`  
+Templates use `__GAN_BASE_PRICE__`; the page Liquid fills it from the live GaN product (`all_products`), so Admin price changes show up without rewriting copy.  
 Rebuild + push: `python3 shared/skills/store-inbox/scripts/build-inbox-deal-page.py` then theme upsert of `templates/page.inbox-deal.liquid`.
 
 Apps Script property: `DEAL_BODIES_URL` (defaults to that URL). Falls back to Drive / inline / `DealFollowupBodies.gs`. Run `refreshDealBodiesCache` after editing.

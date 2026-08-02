@@ -53,7 +53,7 @@ James opens escalated mail on personal → replies in Gmail with From: hello@
 |-------|------|
 | `apps-script/templates/deal-followup.{html,txt}` | Edit here |
 | `scripts/build-inbox-deal-page.py` | Builds `page.inbox-deal.liquid` |
-| Live Shopify | **`https://ourtechaccessories.com/pages/inbox-deal`** → JSON `{ version, html, plain }` |
+| Live Shopify | **`https://ourtechaccessories.com/pages/inbox-deal`** → JSON `{ version, base_price, html, plain }` (`base_price` from live GaN product) |
 | Apps Script | Fetches that URL (`DEAL_BODIES_URL`), 10‑minute cache; falls back to `DealFollowupBodies.gs` |
 
 Docs: **[prompting/deal-followup.md](prompting/deal-followup.md)**. Cross-skill: push theme via **[../shopify-store/SKILL.md](../shopify-store/SKILL.md)**.
